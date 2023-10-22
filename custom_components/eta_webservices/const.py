@@ -1,22 +1,14 @@
-NAME = "eta"
-DOMAIN = "eta"
-ISSUE_URL = "https://github.com/nigl/homeassistant_eta_integration/issues"
-# Configuration and options
-CONF_ENABLED = "enabled"
-
-
+NAME = "eta_webservices"
+DOMAIN = "eta_webservices"
+ISSUE_URL = "https://github.com/Tidone/homeassistant_eta_integration/issues"
 
 
 FLOAT_DICT = "FLOAT_DICT"
-CHOOSEN_ENTITIES = "choosen_entities"
-
-
-BINARY_SENSOR = "binary_sensor"
-SENSOR = "sensor"
-
-PLATFORMS = [BINARY_SENSOR, SENSOR]
-# URLS
-USER_MENU_SUFFIX = "/user/menu"
+SWITCHES_DICT = "SWITCHES_DICT"
+TEXT_DICT = "TEXT_DICT"
+CHOSEN_FLOAT_SENSORS = "chosen_float_sensors"
+CHOSEN_SWITCHES = "chosen_switches"
+CHOSEN_TEXT_SENSORS = "chosen_text_sensors"
 
 # Defaults
 DEFAULT_NAME = DOMAIN

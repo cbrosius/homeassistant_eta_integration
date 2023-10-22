@@ -6,7 +6,7 @@ Help Links:
  SensorEntity derives from Entity https://github.com/home-assistant/core/blob/dev/homeassistant/components/sensor/__init__.py
 
 
-author nigl
+author nigl, Tidone
 
 """
 
@@ -30,7 +30,13 @@ from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.const import CONF_HOST, CONF_PORT
-from .const import DOMAIN, CHOOSEN_ENTITIES, FLOAT_DICT
+from .const import (
+    DOMAIN,
+    CHOSEN_FLOAT_SENSORS,
+    CHOSEN_TEXT_SENSORS,
+    FLOAT_DICT,
+    TEXT_DICT,
+)
 
 SCAN_INTERVAL = timedelta(minutes=1)
 
@@ -46,66 +52,70 @@ async def async_setup_entry(
     if config_entry.options:
         config.update(config_entry.options)
 
-    choosen_entities = config[CHOOSEN_ENTITIES]
+    chosen_float_sensors = config[CHOSEN_FLOAT_SENSORS]
     sensors = [
-        EtaSensor(
+        EtaFloatSensor(
             config,
             hass,
             entity,
-            config[FLOAT_DICT][entity][0],
-            config[FLOAT_DICT][entity][2],
+            config[FLOAT_DICT][entity],
         )
-        for entity in choosen_entities
+        for entity in chosen_float_sensors
     ]
+    chosen_text_sensors = config[CHOSEN_TEXT_SENSORS]
+    sensors.extend(
+        [
+            EtaTextSensor(
+                config,
+                hass,
+                entity,
+                config[TEXT_DICT][entity],
+            )
+            for entity in chosen_text_sensors
+        ]
+    )
     async_add_entities(sensors, update_before_add=True)
 
 
-class EtaSensor(SensorEntity):
+class EtaFloatSensor(SensorEntity):
     """Representation of a Sensor."""
 
-    def __init__(
-        self, config, hass, name, uri, unit, state_class=SensorStateClass.MEASUREMENT
-    ):
+    def __init__(self, config, hass, unique_id, endpoint_info: EtaAPI.Endpoint):
         """
         Initialize sensor.
 
         To show all values: http://192.168.178.75:8080/user/menu
 
-        There are:
-          - entity_id - used to reference id, english, e.g. "eta_outside_temperature"
-          - name - Friendly name, e.g "Außentemperatur" in local language
-
         """
-        _LOGGER.warning("ETA Integration - init sensor")
+        _LOGGER.info("ETA Integration - init float sensor")
 
-        self._attr_device_class = self.determine_device_class(unit)
+        self._attr_device_class = self.determine_device_class(endpoint_info["unit"])
 
-        if unit == "":
-            unit = None
+        self._attr_native_unit_of_measurement = endpoint_info["unit"]
+        if self._attr_native_unit_of_measurement == "":
+            self._attr_native_unit_of_measurement = None
 
         if self._attr_device_class == SensorDeviceClass.ENERGY:
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         else:
-            self._attr_state_class = state_class
+            self._attr_state_class = SensorStateClass.MEASUREMENT
 
-        self._attr_native_unit_of_measurement = unit
         self._attr_native_value = float
-        id = name.lower().replace(" ", "_")
-        self._attr_name = name  # friendly name - local language
-        self.entity_id = generate_entity_id(ENTITY_ID_FORMAT, "eta_" + id, hass=hass)
+        self._attr_name = endpoint_info["friendly_name"]
+        self.entity_id = generate_entity_id(ENTITY_ID_FORMAT, unique_id, hass=hass)
         self.session = async_get_clientsession(hass)
 
-        self.uri = uri
+        self.uri = endpoint_info["url"]
         self.host = config.get(CONF_HOST)
         self.port = config.get(CONF_PORT)
 
         # This must be a unique value within this domain. This is done using host
-        self._attr_unique_id = "eta" + "_" + self.host + "." + name.replace(" ", "_")
+        self._attr_unique_id = unique_id
 
     async def async_update(self):
         """Fetch new state data for the sensor.
         This is the only method that should fetch new data for Home Assistant.
-        readme: activate first: http://www.holzheizer-forum.de/attachment/28434-eta-restful-v1-1-pdf/
+        readme: activate first: https://www.meineta.at/javax.faces.resource/downloads/ETA-RESTful-v1.2.pdf.xhtml?ln=default&v=0
         """
         eta_client = EtaAPI(self.session, self.host, self.port)
         value, _ = await eta_client.get_data(self.uri)
@@ -131,5 +141,39 @@ class EtaSensor(SensorEntity):
 
         if unit in unit_dict_eta:
             return unit_dict_eta[unit]
-        else:
-            return None
+
+        return None
+
+
+class EtaTextSensor(SensorEntity):
+    """Representation of a Sensor."""
+
+    def __init__(self, config, hass, unique_id, endpoint_info: EtaAPI.Endpoint):
+        """
+        Initialize sensor.
+
+        To show all values: http://192.168.178.75:8080/user/menu
+
+        """
+        _LOGGER.info("ETA Integration - init text sensor")
+
+        self._attr_native_value = ""
+        self._attr_name = endpoint_info["friendly_name"]
+        self.entity_id = generate_entity_id(ENTITY_ID_FORMAT, unique_id, hass=hass)
+        self.session = async_get_clientsession(hass)
+
+        self.uri = endpoint_info["url"]
+        self.host = config.get(CONF_HOST)
+        self.port = config.get(CONF_PORT)
+
+        # This must be a unique value within this domain. This is done using host
+        self._attr_unique_id = unique_id
+
+    async def async_update(self):
+        """Fetch new state data for the sensor.
+        This is the only method that should fetch new data for Home Assistant.
+        readme: activate first: https://www.meineta.at/javax.faces.resource/downloads/ETA-RESTful-v1.2.pdf.xhtml?ln=default&v=0
+        """
+        eta_client = EtaAPI(self.session, self.host, self.port)
+        value, _ = await eta_client.get_data(self.uri)
+        self._attr_native_value = value

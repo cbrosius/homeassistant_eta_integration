@@ -1,0 +1,42 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "ETA Schritt 1",
+                "description": "Gib die Netzwerkadresse deines ETA Geräts ein. Wenn du Hilfe bei der Konfiguration brauchst, schau hier nach: https://github.com/Tidone/homeassistant_eta_integration \n\n Info: Abhängig von der Anzahl der möglichen Endpunkte deinse ETA Geräts kann die Abfrage eine lange Zeit dauern! Bitte hab etwas Geduld nachdem du auf Absenden gedrückt hast.",
+                "data": {
+                    "host": "Host",
+                    "port": "Port"
+                }
+            },
+            "select_entities": {
+                "title": "ETA Schritt 2",
+                "description": "Wähle die Sensoren aus, die hinzugefügt werden sollen.",
+                "data": {
+                    "chosen_float_sensors": "Sensoren",
+                    "chosen_switches": "Schalter",
+                    "chosen_text_sensors": "Zustandssensoren"
+                }
+            }
+        },
+        "error": {
+            "unknown_host": "Konnte keine Verbindung zum ETA Gerät aufbauen: Falscher Host oder Port",
+            "no_eta_endpoint": "Konnte keinen ETA Endpunkt finden. Hast du die Webservices in meinETA aktiviert?",
+            "wrong_api_version": "Falsche API Version erkannt. Dein ETA Gerät braucht mindestens die API Version 1.2. Bitte aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware.."
+        },
+        "abort": {
+            "single_instance_allowed": "Host bereits konfiguriert. Nur eine Instanz ist erlaubt."
+        }
+    },
+    "options": {
+        "step": {
+            "user": {
+                "data": {
+                    "chosen_float_sensors": "Sensoren",
+                    "chosen_switches": "Schalter",
+                    "chosen_text_sensors": "Zustandssensoren"
+                }
+            }
+        }
+    }
+}
