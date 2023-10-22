@@ -122,15 +122,14 @@ class EtaAPI:
 
     async def get_all_sensors(self, float_dict, switches_dict, text_dict):
         all_endpoints = await self.get_sensors_dict()
+        queried_endpoints = []
         for key in all_endpoints:
             try:
-                # if (
-                #    "/40/10021/0/0/12161" not in all_endpoints[key]
-                #    and "/40/10021/0/0/12080" not in all_endpoints[key]
-                #    and "/40/10021/0/0/12112" not in all_endpoints[key]
-                #    and "/40/10021/0/0/12000" not in all_endpoints[key]
-                # ):
-                #    continue
+                if all_endpoints[key] in queried_endpoints:
+                    # ignore duplicate endpoints
+                    continue
+
+                queried_endpoints.append(all_endpoints[key])
 
                 fub = key.split("_")[1]
                 endpoint_info = await self._get_varinfo(fub, all_endpoints[key])
