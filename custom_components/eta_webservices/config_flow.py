@@ -277,6 +277,23 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         switches_dict: dict[str, EtaAPI.Endpoint] = self.data[SWITCHES_DICT]
         text_dict: dict[str, EtaAPI.Endpoint] = self.data[TEXT_DICT]
 
+        session = async_get_clientsession(self.hass)
+        eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
+
+        # Update current values
+        for entity in sensors_dict:
+            sensors_dict[entity]["value"], _ = await eta_client.get_data(
+                sensors_dict[entity]["url"]
+            )
+        for entity in switches_dict:
+            switches_dict[entity]["value"], _ = await eta_client.get_data(
+                switches_dict[entity]["url"]
+            )
+        for entity in text_dict:
+            text_dict[entity]["value"], _ = await eta_client.get_data(
+                text_dict[entity]["url"]
+            )
+
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
