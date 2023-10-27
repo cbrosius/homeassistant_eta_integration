@@ -22,7 +22,7 @@
         "error": {
             "unknown_host": "Could not connect to the ETA terminal: Wrong host or port",
             "no_eta_endpoint": "Could not find a valid ETA endpoint. Did you enable the webservices in meinETA?",
-            "wrong_api_version": "Wrong API version detected. Your ETA terminal needs at least API version 1.2. Please update the firmware of your ETA terminal to the latest version."
+            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version."
         },
         "abort": {
             "single_instance_allowed": "Host already configured. Only a single instance is allowed."

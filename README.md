@@ -1,12 +1,14 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/custom-components/hacs)
 
-# ETA integration for Home Assistant
+# ETA Integration for Home Assistant
 Integration of ETA (Heating) sensors and switches to Home Assistant
 
 This integration uses the [ETA REST API](https://www.meineta.at/javax.faces.resource/downloads/ETA-RESTful-v1.2.pdf.xhtml?ln=default&v=0) to get sensor values and set switch states from the ETA pellets heating unit.
 
 This is a fork of [nigl's repo](https://github.com/nigl/homeassistant_eta_integration) with the following changes:
 - Friendly sensor names
+- Shows the current values for all sensors during configuration
+    - This makes it way easier to select the relevant sensors
 - Implemented Switches
 - Implemented Text Sensors (state of some endpoints, e.g. `Bereit` (`Ready`) or `Heizen` (`Heating`) for the boiler)
 - Implemented an error sensor, which activates if the ETA terminal reports at least one error
@@ -20,7 +22,8 @@ This is a fork of [nigl's repo](https://github.com/nigl/homeassistant_eta_integr
     - Click on `Activate Webservices`
     - Follow the instructions
 
-- Your pellet heater has to support at least API version **1.2**! If you are on an older version (check by calling `http://<host>:8080/user/api`) you have to update your firmware to the latest version. Firmware files can be found on `meinETA` (`Settings at the bottom` -> `Installation & Software`).
+- For best results, your pellet heater has to support at least API version **1.2**. If you are on an older version the integration will fall back to a compatibility mode, which means that some sensors may not be correctly detected/identified. The ones that are correctly detected and identified should still work without problems.\
+If you want to update the firmware of your pellet heater you can find the firmware files on `meinETA` (`Settings at the bottom` -> `Installation & Software`).
 
 - Your ETA pellets unit needs a static IP address! Either configure the IP adress directly on the ETA terminal, or set the DHCP server on your router to give the ETA unit a static lease.
 

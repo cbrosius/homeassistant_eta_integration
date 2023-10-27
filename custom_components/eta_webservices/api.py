@@ -8,21 +8,28 @@ import logging
 _LOGGER = logging.getLogger(__name__)
 
 
+class ETAValidSwitchValues(TypedDict):
+    on_value: int
+    off_value: int
+
+
+class ETAEndpoint(TypedDict):
+    url: str
+    value: float | str
+    valid_values: dict | ETAValidSwitchValues | None
+    friendly_name: str
+    unit: str
+    endpoint_type: str
+
+
+class ETAError(TypedDict):
+    msg: str
+    priority: str
+    time: datetime
+    text: str
+
+
 class EtaAPI:
-    class Endpoint(TypedDict):
-        url: str
-        value: float | str
-        valid_values: dict
-        friendly_name: str
-        unit: str
-        endpoint_type: str
-
-    class Error(TypedDict):
-        msg: str
-        priority: str
-        time: datetime
-        text: str
-
     def __init__(self, session, host, port):
         self._session: ClientSession = session
         self._host = host
@@ -107,6 +114,13 @@ class EtaAPI:
         data = xmltodict.parse(text)["eta"]["value"]
         return self._parse_data(data)
 
+    async def _get_data_plus_raw(self, uri):
+        data = await self.get_request("/user/var/" + str(uri))
+        text = await data.text()
+        data = xmltodict.parse(text)["eta"]["value"]
+        value, unit = self._parse_data(data)
+        return value, unit, data["#text"]
+
     async def get_raw_sensor_dict(self):
         data = await self.get_request("/user/menu")
         text = await data.text()
@@ -121,6 +135,83 @@ class EtaAPI:
         return uri_dict
 
     async def get_all_sensors(self, float_dict, switches_dict, text_dict):
+        if await self.is_correct_api_version():
+            # New version with varinfo endpoint detected
+            return await self._get_all_sensors_v12(float_dict, switches_dict, text_dict)
+        else:
+            # varinfo not available -> fall back to compatibility mode
+            return await self._get_all_sensors_v11(float_dict, switches_dict, text_dict)
+
+    def _get_friendly_name(self, key: str):
+        components = key.split("_")[1:]  # The first part ist always empty
+        return " > ".join(components)
+
+    def _is_switch_v11(self, endpoint_info: ETAEndpoint, raw_value):
+        if endpoint_info["unit"] == "" and raw_value in ("1802", "1803"):
+            return True
+        return False
+
+    def _parse_switch_values_v11(self, endpoint_info: ETAEndpoint):
+        endpoint_info["valid_values"] = ETAValidSwitchValues(
+            on_value=1803, off_value=1802
+        )
+
+    async def _get_all_sensors_v11(self, float_dict, switches_dict, text_dict):
+        all_endpoints = await self.get_sensors_dict()
+        queried_endpoints = []
+        for key in all_endpoints:
+            try:
+                if all_endpoints[key] in queried_endpoints:
+                    # ignore duplicate endpoints
+                    continue
+
+                queried_endpoints.append(all_endpoints[key])
+
+                value, unit, raw_value = await self._get_data_plus_raw(
+                    all_endpoints[key]
+                )
+
+                endpoint_info = ETAEndpoint(
+                    url=all_endpoints[key],
+                    valid_values=None,
+                    friendly_name=self._get_friendly_name(key),
+                    unit=unit,
+                    # Fallback: declare all endpoints as text sensors.
+                    # If the unit is in the list of known units, the sensor will be detected as a float sensor anyway.
+                    endpoint_type="TEXT",
+                    value=value,
+                )
+
+                unique_key = (
+                    "eta_"
+                    + self._host.replace(".", "_")
+                    + "_"
+                    + key.lower().replace(" ", "_")
+                )
+
+                if self._is_float_sensor(endpoint_info):
+                    float_dict[unique_key] = endpoint_info
+                elif self._is_switch_v11(endpoint_info, raw_value):
+                    self._parse_switch_values_v11(endpoint_info)
+                    switches_dict[unique_key] = endpoint_info
+                elif self._is_text_sensor(endpoint_info) and value != "":
+                    # Ignore enpoints with an empty value
+                    # This has to be the last branch for the fallback to work
+                    text_dict[unique_key] = endpoint_info
+
+            except:
+                pass
+
+    def _parse_switch_values(self, endpoint_info: ETAEndpoint):
+        valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
+        for key in endpoint_info["valid_values"]:
+            if key in ("Ein", "On"):
+                valid_values["on_value"] = endpoint_info["valid_values"][key]
+            elif key in ("Aus", "Off"):
+                valid_values["off_value"] = endpoint_info["valid_values"][key]
+        endpoint_info["valid_values"] = valid_values
+
+    async def _get_all_sensors_v12(self, float_dict, switches_dict, text_dict):
         all_endpoints = await self.get_sensors_dict()
         queried_endpoints = []
         for key in all_endpoints:
@@ -152,6 +243,7 @@ class EtaAPI:
                 if self._is_float_sensor(endpoint_info):
                     float_dict[unique_key] = endpoint_info
                 elif self._is_switch(endpoint_info):
+                    self._parse_switch_values(endpoint_info)
                     switches_dict[unique_key] = endpoint_info
                 elif self._is_text_sensor(endpoint_info):
                     text_dict[unique_key] = endpoint_info
@@ -159,17 +251,17 @@ class EtaAPI:
             except:
                 pass
 
-    def _is_text_sensor(self, endpoint_info: Endpoint):
+    def _is_text_sensor(self, endpoint_info: ETAEndpoint):
         return (
             endpoint_info["unit"] == ""
             and endpoint_info["valid_values"] is None
             and endpoint_info["endpoint_type"] == "TEXT"
         )
 
-    def _is_float_sensor(self, endpoint_info: Endpoint):
+    def _is_float_sensor(self, endpoint_info: ETAEndpoint):
         return endpoint_info["unit"] in self._float_sensor_units
 
-    def _is_switch(self, endpoint_info: Endpoint):
+    def _is_switch(self, endpoint_info: ETAEndpoint):
         valid_values = endpoint_info["valid_values"]
         if valid_values is None:
             return False
@@ -192,7 +284,7 @@ class EtaAPI:
                 zip([k["@strValue"] for k in values], [int(v["#text"]) for v in values])
             )
 
-        return self.Endpoint(
+        return ETAEndpoint(
             valid_values=valid_values,
             friendly_name=data["@fullName"],
             unit=data["@unit"],
@@ -238,7 +330,7 @@ class EtaAPI:
             if "error" in fub:
                 for error in fub["error"]:
                     errors.append(
-                        EtaAPI.Error(
+                        ETAError(
                             msg=error["@msg"],
                             priority=error["@priority"],
                             time=datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S"),

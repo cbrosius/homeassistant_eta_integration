@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_registry import (
     async_entries_for_config_entry,
     async_get,
 )
-from .api import EtaAPI
+from .api import ETAEndpoint, EtaAPI
 from .const import (
     DOMAIN,
     FLOAT_DICT,
@@ -50,19 +50,19 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 is_correct_api_version = await self._is_correct_api_version(
                     user_input[CONF_HOST], user_input[CONF_PORT]
                 )
-                if is_correct_api_version:
-                    self.data = user_input
-                    (
-                        self.data[FLOAT_DICT],
-                        self.data[SWITCHES_DICT],
-                        self.data[TEXT_DICT],
-                    ) = await self._get_possible_endpoints(
-                        user_input[CONF_HOST], user_input[CONF_PORT]
-                    )
-
-                    return await self.async_step_select_entities()
-                else:
+                if not is_correct_api_version:
                     self._errors["base"] = "wrong_api_version"
+
+                self.data = user_input
+                (
+                    self.data[FLOAT_DICT],
+                    self.data[SWITCHES_DICT],
+                    self.data[TEXT_DICT],
+                ) = await self._get_possible_endpoints(
+                    user_input[CONF_HOST], user_input[CONF_PORT]
+                )
+
+                return await self.async_step_select_entities()
             else:
                 self._errors["base"] = (
                     "no_eta_endpoint" if valid == 0 else "unknown_host"
@@ -114,9 +114,9 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _show_config_form_endpoint(self):
         """Show the configuration form to select which endpoints should become entities."""
-        sensors_dict: dict[str, EtaAPI.Endpoint] = self.data[FLOAT_DICT]
-        switches_dict: dict[str, EtaAPI.Endpoint] = self.data[SWITCHES_DICT]
-        text_dict: dict[str, EtaAPI.Endpoint] = self.data[TEXT_DICT]
+        sensors_dict: dict[str, ETAEndpoint] = self.data[FLOAT_DICT]
+        switches_dict: dict[str, ETAEndpoint] = self.data[SWITCHES_DICT]
+        text_dict: dict[str, ETAEndpoint] = self.data[TEXT_DICT]
 
         return self.async_show_form(
             step_id="select_entities",
@@ -273,9 +273,9 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         current_chosen_text_sensors,
     ):
         """Show the configuration form to select which endpoints should become entities."""
-        sensors_dict: dict[str, EtaAPI.Endpoint] = self.data[FLOAT_DICT]
-        switches_dict: dict[str, EtaAPI.Endpoint] = self.data[SWITCHES_DICT]
-        text_dict: dict[str, EtaAPI.Endpoint] = self.data[TEXT_DICT]
+        sensors_dict: dict[str, ETAEndpoint] = self.data[FLOAT_DICT]
+        switches_dict: dict[str, ETAEndpoint] = self.data[SWITCHES_DICT]
+        text_dict: dict[str, ETAEndpoint] = self.data[TEXT_DICT]
 
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])

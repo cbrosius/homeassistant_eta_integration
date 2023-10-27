@@ -16,7 +16,7 @@ import logging
 from datetime import timedelta
 
 _LOGGER = logging.getLogger(__name__)
-from .api import EtaAPI
+from .api import ETAEndpoint, EtaAPI
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -80,7 +80,7 @@ async def async_setup_entry(
 class EtaFloatSensor(SensorEntity):
     """Representation of a Sensor."""
 
-    def __init__(self, config, hass, unique_id, endpoint_info: EtaAPI.Endpoint):
+    def __init__(self, config, hass, unique_id, endpoint_info: ETAEndpoint):
         """
         Initialize sensor.
 
@@ -148,7 +148,7 @@ class EtaFloatSensor(SensorEntity):
 class EtaTextSensor(SensorEntity):
     """Representation of a Sensor."""
 
-    def __init__(self, config, hass, unique_id, endpoint_info: EtaAPI.Endpoint):
+    def __init__(self, config, hass, unique_id, endpoint_info: ETAEndpoint):
         """
         Initialize sensor.
 

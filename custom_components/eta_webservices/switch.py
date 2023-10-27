@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 
 _LOGGER = logging.getLogger(__name__)
-from .api import EtaAPI
+from .api import EtaAPI, ETAEndpoint
 
 from homeassistant.components.switch import (
     SwitchDeviceClass,
@@ -44,7 +44,7 @@ async def async_setup_entry(
 class EtaSwitch(SwitchEntity):
     """Representation of a Switch."""
 
-    def __init__(self, config, hass, unique_id, endpoint_info: EtaAPI.Endpoint):
+    def __init__(self, config, hass, unique_id, endpoint_info: ETAEndpoint):
         """
         Initialize switch.
 
@@ -60,11 +60,8 @@ class EtaSwitch(SwitchEntity):
         self.uri = endpoint_info["url"]
         self.host = config.get(CONF_HOST)
         self.port = config.get(CONF_PORT)
-        for key in endpoint_info["valid_values"]:
-            if key in ("Ein", "On"):
-                self.on_value = endpoint_info["valid_values"][key]
-            elif key in ("Aus", "Off"):
-                self.off_value = endpoint_info["valid_values"][key]
+        self.on_value = endpoint_info["valid_values"]["on_value"]
+        self.off_value = endpoint_info["valid_values"]["off_value"]
         self._is_on = False
 
         # This must be a unique value within this domain. This is done using host
