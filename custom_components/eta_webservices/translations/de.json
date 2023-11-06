@@ -38,5 +38,25 @@
                 }
             }
         }
+    },
+    "entity": {
+        "button": {
+            "send_error_events_btn": {
+                "name": "Fehler-Ereignisse neu senden"
+            }
+        },
+        "binary_sensor": {
+            "state_sensor": {
+                "name": "Zustand"
+            }
+        },
+        "sensor": {
+            "nbr_active_errors_sensor": {
+                "name": "Anzahl der aktiven Fehler"
+            },
+            "latest_error_sensor": {
+                "name": "Neuester aktiver Fehler"
+            }
+        }
     }
 }

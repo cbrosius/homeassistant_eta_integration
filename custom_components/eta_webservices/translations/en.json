@@ -38,5 +38,25 @@
                 }
             }
         }
+    },
+    "entity": {
+        "button": {
+            "send_error_events_btn": {
+                "name": "Resend Error Events"
+            }
+        },
+        "binary_sensor": {
+            "state_sensor": {
+                "name": "State"
+            }
+        },
+        "sensor": {
+            "nbr_active_errors_sensor": {
+                "name": "Number of active errors"
+            },
+            "latest_error_sensor": {
+                "name": "Latest active error"
+            }
+        }
     }
 }

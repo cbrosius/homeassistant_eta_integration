@@ -15,8 +15,11 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 _LOGGER = logging.getLogger(__name__)
-from .api import ETAEndpoint, EtaAPI
+from .api import ETAEndpoint, EtaAPI, ETAError
+from .coordinator import ETAErrorUpdateCoordinator
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -25,11 +28,12 @@ from homeassistant.components.sensor import (
     ENTITY_ID_FORMAT,
 )
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import generate_entity_id
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.const import CONF_HOST, CONF_PORT, EntityCategory
 from .const import (
     DOMAIN,
     CHOSEN_FLOAT_SENSORS,
@@ -74,13 +78,26 @@ async def async_setup_entry(
             for entity in chosen_text_sensors
         ]
     )
+    coordinator = config["error_update_coordinator"]
+    sensors.extend(
+        [
+            EtaNbrErrorsSensor(config, hass, coordinator),
+            EtaLatestErrorSensor(config, hass, coordinator),
+        ]
+    )
     async_add_entities(sensors, update_before_add=True)
 
 
 class EtaFloatSensor(SensorEntity):
-    """Representation of a Sensor."""
+    """Representation of a Float Sensor."""
 
-    def __init__(self, config, hass, unique_id, endpoint_info: ETAEndpoint):
+    def __init__(
+        self,
+        config: dict,
+        hass: HomeAssistant,
+        unique_id: str,
+        endpoint_info: ETAEndpoint,
+    ) -> None:
         """
         Initialize sensor.
 
@@ -108,6 +125,12 @@ class EtaFloatSensor(SensorEntity):
         self.uri = endpoint_info["url"]
         self.host = config.get(CONF_HOST)
         self.port = config.get(CONF_PORT)
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={
+                (DOMAIN, "eta_" + self.host.replace(".", "_") + "_" + str(self.port))
+            }
+        )
 
         # This must be a unique value within this domain. This is done using host
         self._attr_unique_id = unique_id
@@ -146,9 +169,15 @@ class EtaFloatSensor(SensorEntity):
 
 
 class EtaTextSensor(SensorEntity):
-    """Representation of a Sensor."""
+    """Representation of a Text Sensor."""
 
-    def __init__(self, config, hass, unique_id, endpoint_info: ETAEndpoint):
+    def __init__(
+        self,
+        config: dict,
+        hass: HomeAssistant,
+        unique_id: str,
+        endpoint_info: ETAEndpoint,
+    ) -> None:
         """
         Initialize sensor.
 
@@ -166,6 +195,12 @@ class EtaTextSensor(SensorEntity):
         self.host = config.get(CONF_HOST)
         self.port = config.get(CONF_PORT)
 
+        self._attr_device_info = DeviceInfo(
+            identifiers={
+                (DOMAIN, "eta_" + self.host.replace(".", "_") + "_" + str(self.port))
+            }
+        )
+
         # This must be a unique value within this domain. This is done using host
         self._attr_unique_id = unique_id
 
@@ -177,3 +212,92 @@ class EtaTextSensor(SensorEntity):
         eta_client = EtaAPI(self.session, self.host, self.port)
         value, _ = await eta_client.get_data(self.uri)
         self._attr_native_value = value
+
+
+class EtaNbrErrorsSensor(SensorEntity, CoordinatorEntity[ETAErrorUpdateCoordinator]):
+    """Representation of a sensor showing the number of active errors."""
+
+    def __init__(
+        self, config: dict, hass: HomeAssistant, coordinator: ETAErrorUpdateCoordinator
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+        self._attr_native_value = float
+        self._attr_native_unit_of_measurement = None
+
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "nbr_active_errors_sensor"
+
+        host = config.get(CONF_HOST)
+        port = config.get(CONF_PORT)
+
+        self._attr_unique_id = (
+            "eta_" + host.replace(".", "_") + "_" + str(port) + "_nbr_active_errors"
+        )
+        self.entity_id = generate_entity_id(
+            ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
+        )
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, "eta_" + host.replace(".", "_") + "_" + str(port))}
+        )
+
+        self._handle_error_updates(self.coordinator.data)
+
+    def _handle_error_updates(self, errors: list):
+        self._attr_native_value = len(errors)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        self._handle_error_updates(self.coordinator.data)
+        super()._handle_coordinator_update()
+
+
+class EtaLatestErrorSensor(SensorEntity, CoordinatorEntity[ETAErrorUpdateCoordinator]):
+    """Representation of a sensor showing the latest active error."""
+
+    def __init__(
+        self, config: dict, hass: HomeAssistant, coordinator: ETAErrorUpdateCoordinator
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+        self._attr_native_value = ""
+        self._attr_native_unit_of_measurement = None
+
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "latest_error_sensor"
+
+        host = config.get(CONF_HOST)
+        port = config.get(CONF_PORT)
+
+        self._attr_unique_id = (
+            "eta_" + host.replace(".", "_") + "_" + str(port) + "_latest_error"
+        )
+        self.entity_id = generate_entity_id(
+            ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
+        )
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, "eta_" + host.replace(".", "_") + "_" + str(port))}
+        )
+
+        self._handle_error_updates(self.coordinator.data)
+
+    def _handle_error_updates(self, errors: list[ETAError]):
+        if len(errors) == 0:
+            self._attr_native_value = "-"
+            return
+
+        sorted_errors = sorted(errors, key=lambda d: d["time"])
+        self._attr_native_value = sorted_errors[-1]["msg"]
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        self._handle_error_updates(self.coordinator.data)
+        super()._handle_coordinator_update()

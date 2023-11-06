@@ -1,12 +1,15 @@
-import logging
-import asyncio
-
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 
 from .const import DOMAIN
+from .coordinator import ETAErrorUpdateCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+]
 
 
 async def async_setup_entry(
@@ -14,12 +17,17 @@ async def async_setup_entry(
 ) -> bool:
     """Set up platform from a ConfigEntry."""
     hass.data.setdefault(DOMAIN, {})
-    hass_data = dict(entry.data)
+    config = dict(entry.data)
     # Registers update listener to update config entry when options are updated.
     unsub_options_update_listener = entry.add_update_listener(options_update_listener)
     # Store a reference to the unsubscribe function to cleanup if an entry is unloaded.
-    hass_data["unsub_options_update_listener"] = unsub_options_update_listener
-    hass.data[DOMAIN][entry.entry_id] = hass_data
+    config["unsub_options_update_listener"] = unsub_options_update_listener
+    error_coordinator = ETAErrorUpdateCoordinator(hass, config)
+    config["error_update_coordinator"] = error_coordinator
+
+    await error_coordinator.async_config_entry_first_refresh()
+
+    hass.data[DOMAIN][entry.entry_id] = config
 
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

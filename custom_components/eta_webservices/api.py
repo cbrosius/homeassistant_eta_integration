@@ -27,13 +27,16 @@ class ETAError(TypedDict):
     priority: str
     time: datetime
     text: str
+    fub: str
+    host: str
+    port: int
 
 
 class EtaAPI:
     def __init__(self, session, host, port):
         self._session: ClientSession = session
         self._host = host
-        self._port = port
+        self._port = int(port)
 
         self._float_sensor_units = [
             "%",
@@ -325,24 +328,35 @@ class EtaAPI:
 
     def _parse_errors(self, data):
         errors = []
+        if isinstance(data, dict):
+            data = [
+                data,
+            ]
 
         for fub in data:
-            if "error" in fub:
-                for error in fub["error"]:
-                    errors.append(
-                        ETAError(
-                            msg=error["@msg"],
-                            priority=error["@priority"],
-                            time=datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S"),
-                            text=error["#text"],
-                        )
+            fub_name = fub.get("@name", "")
+            fub_errors = fub.get("error", [])
+            if isinstance(fub_errors, dict):
+                fub_errors = [
+                    fub_errors,
+                ]
+            for error in fub_errors:
+                errors.append(
+                    ETAError(
+                        msg=error["@msg"],
+                        priority=error["@priority"],
+                        time=datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S"),
+                        text=error["#text"],
+                        fub=fub_name,
+                        host=self._host,
+                        port=self._port,
                     )
+                )
 
         return errors
 
     async def get_errors(self):
         data = await self.get_request("/user/errors")
         text = await data.text()
-        # text = '<eta version="1.0" xmlns="http://www.eta.co.at/rest/v1"><errors uri="/user/errors"><fub uri="/112/10021" name="Kessel"><error msg="Flue gas sensor Interrupted" priority="Error" time="2011-06-29 12:47:50">Sensor or Cable broken or badly connected</error><error msg="Water pressure too low 0,00 bar" priority="Error" time="2011-06-29 12:48:12">Top up heating water! If this warning occurs more than once a year, please contact plumber.</error></fub><fub uri="/112/10101" name="HK1"/></errors></eta>'
         data = xmltodict.parse(text)["eta"]["errors"]["fub"]
         return self._parse_errors(data)

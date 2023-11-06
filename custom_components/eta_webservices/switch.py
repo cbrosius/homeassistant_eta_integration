@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant import config_entries
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import generate_entity_id
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.const import CONF_HOST, CONF_PORT
 from .const import DOMAIN, CHOSEN_SWITCHES, SWITCHES_DICT
 
@@ -44,7 +45,13 @@ async def async_setup_entry(
 class EtaSwitch(SwitchEntity):
     """Representation of a Switch."""
 
-    def __init__(self, config, hass, unique_id, endpoint_info: ETAEndpoint):
+    def __init__(
+        self,
+        config: dict,
+        hass: HomeAssistant,
+        unique_id: str,
+        endpoint_info: ETAEndpoint,
+    ) -> None:
         """
         Initialize switch.
 
@@ -63,6 +70,14 @@ class EtaSwitch(SwitchEntity):
         self.on_value = endpoint_info["valid_values"]["on_value"]
         self.off_value = endpoint_info["valid_values"]["off_value"]
         self._is_on = False
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={
+                (DOMAIN, "eta_" + self.host.replace(".", "_") + "_" + str(self.port))
+            },
+            name="ETA",
+            manufacturer="ETA",
+        )
 
         # This must be a unique value within this domain. This is done using host
         self._attr_unique_id = unique_id
