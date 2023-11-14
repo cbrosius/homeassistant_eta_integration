@@ -58,5 +58,29 @@
                 "name": "Latest active error"
             }
         }
+    },
+    "services": {
+        "write_value": {
+            "name": "Set value",
+            "description": "Sets the value of an endpoint (Attention: Exercise caution! A wrong value can render your ETA heating unit unusable.)",
+            "fields": {
+                "endpoint_url": {
+                    "name": "Endpoint URI",
+                    "description": "URI of the endpoint (only the numeric part, without host and port) (see http://[eta_host]:[eta_port]/user/menu)"
+                },
+                "value": {
+                    "name": "Value",
+                    "description": "The value to be set"
+                },
+                "begin": {
+                    "name": "Begin",
+                    "description": "Optional start time in 15 minute increments since midnight"
+                },
+                "end": {
+                    "name": "End",
+                    "description": "Optional end time in 15 minute increments since midnight"
+                }
+            }
+        }
     }
 }

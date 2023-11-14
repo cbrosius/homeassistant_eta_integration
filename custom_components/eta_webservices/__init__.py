@@ -1,8 +1,10 @@
+import logging
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 
 from .const import DOMAIN
 from .coordinator import ETAErrorUpdateCoordinator
+from .services import async_setup_services
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -11,6 +13,7 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
+_LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: core.HomeAssistant, entry: config_entries.ConfigEntry
@@ -31,6 +34,8 @@ async def async_setup_entry(
 
     # Forward the setup to the sensor platform.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    await async_setup_services(hass, entry)
 
     return True
 

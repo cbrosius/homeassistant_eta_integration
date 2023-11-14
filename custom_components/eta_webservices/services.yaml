@@ -1,0 +1,24 @@
+write_value:
+  fields:
+    endpoint_url:
+      required: true
+      selector:
+        text:
+    value:
+      required: true
+      selector:
+        text:
+    begin:
+     required: false
+     selector:
+      number:
+       min: 0
+       max: 96
+       mode: box
+    end:
+     required: false
+     selector:
+      number:
+       min: 0
+       max: 96
+       mode: box

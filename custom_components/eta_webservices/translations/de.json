@@ -58,5 +58,29 @@
                 "name": "Neuester aktiver Fehler"
             }
         }
+    },
+    "services": {
+        "write_value": {
+            "name": "Wert setzen",
+            "description": "Setzt den Wert eines Endpunkts (Achtung: Nur unter großer Vorsicht verwenden! Ein falscher Wert kann die ETA Heizung unbrauchbar machen.)",
+            "fields": {
+                "endpoint_url": {
+                    "name": "Endpunkt URI",
+                    "description": "URI des Endpunkts (nur die Zahlenfolge, ohne Host und Port) (siehe http://[eta_host]:[eta_port]/user/menu)"
+                },
+                "value": {
+                    "name": "Wert",
+                    "description": "Zu setzender Wert"
+                },
+                "begin": {
+                    "name": "Startzeit",
+                    "description": "Optionale Startzeit in 15 Minuten Schritten seit Mitternacht"
+                },
+                "end": {
+                    "name": "Endzeit",
+                    "description": "Optionale Endzeit in 15 Minuten Schritten seit Mitternacht"
+                }
+            }
+        }
     }
 }

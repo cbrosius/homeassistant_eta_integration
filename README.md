@@ -16,6 +16,7 @@ This is a fork of [nigl's repo](https://github.com/nigl/homeassistant_eta_integr
     - A sensor, which shows the number of active errors
     - A sensor, which shows the latest active error message
 - Implemented error events ([details](#error-events))
+- Implemented a custom service to set the value of an endpoint ([details](#set-value-service))
 
 ## Installation:
 This integration can be configured directly in Home Assistant via HACS:
@@ -91,6 +92,23 @@ If you want to send a test event to check if your automations work you can follo
       ```
 1. Click on `Fire Event`
 1. Your automation should have been triggered
+
+## Set Value Service
+This integration implements a custom service to write values to ETA endpoints.
+
+**Attention**: This service is very low-level and does not respect the `scaleFactor` and other attributes of the endpoints! You have to calculate the correct value yourself!
+E.g. If an endpoint has a scaleFactor of 10 and you want set the value 55, you have to write 550 to the endpoint.
+
+### Testing the Service
+1. Open Home Assistant
+1. Go to `Developer tools` -> `Services` on top
+1. Select the `Eta Sensors: Set value` service
+1. Enter the numeric part of the endpoint URI (e.g. `/40/10021/0/0/12080`, which should be the On/Off button)
+1. Enter the value you want to write (e.g. `1803` to turn on the heating unit)
+1. Some endpoints, such as the heating windows, require a begin and end time in addition to the value
+    - These values have to be specified in 15 minute increments since midnight!
+        - E.g. a time of 15:30 (3:30pm) would be a value of `62` (`15*4+2` or `(15*60+30)/15`)
+
 
 ## Future Development
 The ETA REST interface allows users to set many configuration values, like setpoints for temperatures, warning limits, etc.

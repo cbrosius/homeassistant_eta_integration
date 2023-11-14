@@ -326,6 +326,28 @@ class EtaAPI:
         )
         return False
 
+    async def write_endpoint(self, uri, value, begin=None, end=None):
+        payload = {"value": value}
+        if begin is not None:
+            payload["begin"] = begin
+            payload["end"] = end
+        uri = "/user/var/" + str(uri)
+        data = await self.post_request(uri, payload)
+        text = await data.text()
+        data = xmltodict.parse(text)["eta"]
+        if "success" in data:
+            return True
+        elif "error" in data:
+            _LOGGER.error(
+                f"ETA Integration - could not set write value to endpoint. Terminal returned: {data['error']}"
+            )
+            return False
+
+        _LOGGER.error(
+            f"ETA Integration - could not set write value to endpoint. Got invalid result: {text}"
+        )
+        return False
+
     def _parse_errors(self, data):
         errors = []
         if isinstance(data, dict):
