@@ -15,11 +15,10 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 _LOGGER = logging.getLogger(__name__)
 from .api import ETAEndpoint, EtaAPI, ETAError
 from .coordinator import ETAErrorUpdateCoordinator
+from .entity import EtaEntity, EtaEntityWithCoordinator
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -28,12 +27,9 @@ from homeassistant.components.sensor import (
     ENTITY_ID_FORMAT,
 )
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant import config_entries
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.entity import generate_entity_id
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.const import CONF_HOST, CONF_PORT, EntityCategory
+from homeassistant.const import EntityCategory
 from .const import (
     DOMAIN,
     CHOSEN_FLOAT_SENSORS,
@@ -52,9 +48,6 @@ async def async_setup_entry(
 ):
     """Setup sensors from a config entry created in the integrations UI."""
     config = hass.data[DOMAIN][config_entry.entry_id]
-    # Update our config to include new repos and remove those that have been removed.
-    if config_entry.options:
-        config.update(config_entry.options)
 
     chosen_float_sensors = config[CHOSEN_FLOAT_SENSORS]
     sensors = [
@@ -88,7 +81,7 @@ async def async_setup_entry(
     async_add_entities(sensors, update_before_add=True)
 
 
-class EtaFloatSensor(SensorEntity):
+class EtaFloatSensor(EtaEntity, SensorEntity):
     """Representation of a Float Sensor."""
 
     def __init__(
@@ -106,6 +99,8 @@ class EtaFloatSensor(SensorEntity):
         """
         _LOGGER.info("ETA Integration - init float sensor")
 
+        super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
+
         self._attr_device_class = self.determine_device_class(endpoint_info["unit"])
 
         self._attr_native_unit_of_measurement = endpoint_info["unit"]
@@ -118,22 +113,8 @@ class EtaFloatSensor(SensorEntity):
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
         self._attr_native_value = float
-        self._attr_name = endpoint_info["friendly_name"]
-        self.entity_id = generate_entity_id(ENTITY_ID_FORMAT, unique_id, hass=hass)
-        self.session = async_get_clientsession(hass)
 
         self.uri = endpoint_info["url"]
-        self.host = config.get(CONF_HOST)
-        self.port = config.get(CONF_PORT)
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={
-                (DOMAIN, "eta_" + self.host.replace(".", "_") + "_" + str(self.port))
-            }
-        )
-
-        # This must be a unique value within this domain. This is done using host
-        self._attr_unique_id = unique_id
 
     async def async_update(self):
         """Fetch new state data for the sensor.
@@ -168,7 +149,7 @@ class EtaFloatSensor(SensorEntity):
         return None
 
 
-class EtaTextSensor(SensorEntity):
+class EtaTextSensor(EtaEntity, SensorEntity):
     """Representation of a Text Sensor."""
 
     def __init__(
@@ -186,23 +167,11 @@ class EtaTextSensor(SensorEntity):
         """
         _LOGGER.info("ETA Integration - init text sensor")
 
+        super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
+
         self._attr_native_value = ""
-        self._attr_name = endpoint_info["friendly_name"]
-        self.entity_id = generate_entity_id(ENTITY_ID_FORMAT, unique_id, hass=hass)
-        self.session = async_get_clientsession(hass)
 
         self.uri = endpoint_info["url"]
-        self.host = config.get(CONF_HOST)
-        self.port = config.get(CONF_PORT)
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={
-                (DOMAIN, "eta_" + self.host.replace(".", "_") + "_" + str(self.port))
-            }
-        )
-
-        # This must be a unique value within this domain. This is done using host
-        self._attr_unique_id = unique_id
 
     async def async_update(self):
         """Fetch new state data for the sensor.
@@ -214,13 +183,17 @@ class EtaTextSensor(SensorEntity):
         self._attr_native_value = value
 
 
-class EtaNbrErrorsSensor(SensorEntity, CoordinatorEntity[ETAErrorUpdateCoordinator]):
+class EtaNbrErrorsSensor(
+    SensorEntity, EtaEntityWithCoordinator[ETAErrorUpdateCoordinator]
+):
     """Representation of a sensor showing the number of active errors."""
 
     def __init__(
         self, config: dict, hass: HomeAssistant, coordinator: ETAErrorUpdateCoordinator
     ) -> None:
-        super().__init__(coordinator)
+        super().__init__(
+            coordinator, config, hass, ENTITY_ID_FORMAT, "_nbr_active_errors"
+        )
 
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -230,39 +203,21 @@ class EtaNbrErrorsSensor(SensorEntity, CoordinatorEntity[ETAErrorUpdateCoordinat
         self._attr_has_entity_name = True
         self._attr_translation_key = "nbr_active_errors_sensor"
 
-        host = config.get(CONF_HOST)
-        port = config.get(CONF_PORT)
+        self.handle_data_updates(self.coordinator.data)
 
-        self._attr_unique_id = (
-            "eta_" + host.replace(".", "_") + "_" + str(port) + "_nbr_active_errors"
-        )
-        self.entity_id = generate_entity_id(
-            ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
-        )
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "eta_" + host.replace(".", "_") + "_" + str(port))}
-        )
-
-        self._handle_error_updates(self.coordinator.data)
-
-    def _handle_error_updates(self, errors: list):
-        self._attr_native_value = len(errors)
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Update attributes when the coordinator updates."""
-        self._handle_error_updates(self.coordinator.data)
-        super()._handle_coordinator_update()
+    def handle_data_updates(self, data: list):
+        self._attr_native_value = len(data)
 
 
-class EtaLatestErrorSensor(SensorEntity, CoordinatorEntity[ETAErrorUpdateCoordinator]):
+class EtaLatestErrorSensor(
+    SensorEntity, EtaEntityWithCoordinator[ETAErrorUpdateCoordinator]
+):
     """Representation of a sensor showing the latest active error."""
 
     def __init__(
         self, config: dict, hass: HomeAssistant, coordinator: ETAErrorUpdateCoordinator
     ) -> None:
-        super().__init__(coordinator)
+        super().__init__(coordinator, config, hass, ENTITY_ID_FORMAT, "_latest_error")
 
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -272,32 +227,12 @@ class EtaLatestErrorSensor(SensorEntity, CoordinatorEntity[ETAErrorUpdateCoordin
         self._attr_has_entity_name = True
         self._attr_translation_key = "latest_error_sensor"
 
-        host = config.get(CONF_HOST)
-        port = config.get(CONF_PORT)
+        self.handle_data_updates(self.coordinator.data)
 
-        self._attr_unique_id = (
-            "eta_" + host.replace(".", "_") + "_" + str(port) + "_latest_error"
-        )
-        self.entity_id = generate_entity_id(
-            ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
-        )
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "eta_" + host.replace(".", "_") + "_" + str(port))}
-        )
-
-        self._handle_error_updates(self.coordinator.data)
-
-    def _handle_error_updates(self, errors: list[ETAError]):
-        if len(errors) == 0:
+    def handle_data_updates(self, data: list[ETAError]):
+        if len(data) == 0:
             self._attr_native_value = "-"
             return
 
-        sorted_errors = sorted(errors, key=lambda d: d["time"])
+        sorted_errors = sorted(data, key=lambda d: d["time"])
         self._attr_native_value = sorted_errors[-1]["msg"]
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Update attributes when the coordinator updates."""
-        self._handle_error_updates(self.coordinator.data)
-        super()._handle_coordinator_update()

@@ -37,6 +37,9 @@
                     "chosen_text_sensors": "Possible state sensors"
                 }
             }
+        },
+        "error": {
+            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version."
         }
     },
     "entity": {

@@ -27,9 +27,10 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize."""
         self._errors = {}
+        self.data = {}
 
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
@@ -196,18 +197,18 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 class EtaOptionsFlowHandler(config_entries.OptionsFlow):
     """Blueprint config flow options handler."""
 
-    def __init__(self, config_entry):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize HACS options flow."""
         self.config_entry = config_entry
-        self.data = dict(config_entry.data)
+        self.data = {}
+        self._errors = {}
 
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
+        self.data = self.hass.data[DOMAIN][self.config_entry.entry_id]
         return await self.async_step_user()
 
     async def async_step_user(self, user_input=None):
         """Manage the options."""
-        self._errors = {}
-
         entity_registry = async_get(self.hass)
         entries = async_entries_for_config_entry(
             entity_registry, self.config_entry.entry_id
@@ -279,6 +280,10 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
 
+        is_correct_api_version = await eta_client.is_correct_api_version()
+        if not is_correct_api_version:
+            self._errors["base"] = "wrong_api_version"
+
         # Update current values
         for entity in sensors_dict:
             sensors_dict[entity]["value"], _ = await eta_client.get_data(
@@ -344,10 +349,5 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 }
             ),
-        )
-
-    async def _update_options(self):
-        """Update config entry options."""
-        return self.async_create_entry(
-            title=self.config_entry.data.get(CONF_HOST), data=self.options
+            errors=self._errors,
         )

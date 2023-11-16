@@ -33,7 +33,7 @@ class ETAError(TypedDict):
 
 
 class EtaAPI:
-    def __init__(self, session, host, port):
+    def __init__(self, session, host, port) -> None:
         self._session: ClientSession = session
         self._host = host
         self._port = int(port)
@@ -63,37 +63,39 @@ class EtaAPI:
     def build_uri(self, suffix):
         return "http://" + self._host + ":" + str(self._port) + suffix
 
-    def evaluate_xml_dict(self, xml_dict, uri_dict, prefix=""):
+    def _evaluate_xml_dict(self, xml_dict, uri_dict, prefix=""):
         if type(xml_dict) == list:
             for child in xml_dict:
-                self.evaluate_xml_dict(child, uri_dict, prefix)
+                self._evaluate_xml_dict(child, uri_dict, prefix)
         else:
             if "object" in xml_dict:
                 child = xml_dict["object"]
                 new_prefix = f"{prefix}_{xml_dict['@name']}"
                 # add parent to uri_dict and evaluate childs then
                 uri_dict[f"{prefix}_{xml_dict['@name']}"] = xml_dict["@uri"]
-                self.evaluate_xml_dict(child, uri_dict, new_prefix)
+                self._evaluate_xml_dict(child, uri_dict, new_prefix)
             else:
                 uri_dict[f"{prefix}_{xml_dict['@name']}"] = xml_dict["@uri"]
 
-    async def get_request(self, suffix):
+    async def _get_request(self, suffix):
         data = await self._session.get(self.build_uri(suffix))
         return data
 
     async def post_request(self, suffix, data):
         data = await self._session.post(self.build_uri(suffix), data=data)
-        # data = await self._session.post("http://httpbin.org/post", data=data)  # TODO
         return data
 
     async def does_endpoint_exists(self):
-        resp = await self.get_request("/user/menu")
+        resp = await self._get_request("/user/menu")
         return resp.status == 200
 
-    async def is_correct_api_version(self):
-        data = await self.get_request("/user/api")
+    async def get_api_version(self):
+        data = await self._get_request("/user/api")
         text = await data.text()
-        eta_version = version.parse(xmltodict.parse(text)["eta"]["api"]["@version"])
+        return version.parse(xmltodict.parse(text)["eta"]["api"]["@version"])
+
+    async def is_correct_api_version(self):
+        eta_version = await self.get_api_version()
         required_version = version.parse("1.2")
 
         return eta_version >= required_version
@@ -112,29 +114,32 @@ class EtaAPI:
         return value, unit
 
     async def get_data(self, uri):
-        data = await self.get_request("/user/var/" + str(uri))
+        data = await self._get_request("/user/var/" + str(uri))
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["value"]
         return self._parse_data(data)
 
     async def _get_data_plus_raw(self, uri):
-        data = await self.get_request("/user/var/" + str(uri))
+        data = await self._get_request("/user/var/" + str(uri))
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["value"]
         value, unit = self._parse_data(data)
         return value, unit, data["#text"]
 
-    async def get_raw_sensor_dict(self):
-        data = await self.get_request("/user/menu")
+    async def get_menu(self):
+        data = await self._get_request("/user/menu")
         text = await data.text()
-        data = xmltodict.parse(text)
+        return xmltodict.parse(text)
+
+    async def _get_raw_sensor_dict(self):
+        data = await self.get_menu()
         raw_dict = data["eta"]["menu"]["fub"]
         return raw_dict
 
-    async def get_sensors_dict(self):
-        raw_dict = await self.get_raw_sensor_dict()
+    async def _get_sensors_dict(self):
+        raw_dict = await self._get_raw_sensor_dict()
         uri_dict = {}
-        self.evaluate_xml_dict(raw_dict, uri_dict)
+        self._evaluate_xml_dict(raw_dict, uri_dict)
         return uri_dict
 
     async def get_all_sensors(self, float_dict, switches_dict, text_dict):
@@ -160,7 +165,7 @@ class EtaAPI:
         )
 
     async def _get_all_sensors_v11(self, float_dict, switches_dict, text_dict):
-        all_endpoints = await self.get_sensors_dict()
+        all_endpoints = await self._get_sensors_dict()
         queried_endpoints = []
         for key in all_endpoints:
             try:
@@ -215,7 +220,7 @@ class EtaAPI:
         endpoint_info["valid_values"] = valid_values
 
     async def _get_all_sensors_v12(self, float_dict, switches_dict, text_dict):
-        all_endpoints = await self.get_sensors_dict()
+        all_endpoints = await self._get_sensors_dict()
         queried_endpoints = []
         for key in all_endpoints:
             try:
@@ -295,7 +300,7 @@ class EtaAPI:
         )
 
     async def _get_varinfo(self, fub, uri):
-        data = await self.get_request("/user/varinfo/" + str(uri))
+        data = await self._get_request("/user/varinfo/" + str(uri))
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["varInfo"]["variable"]
         endpoint_info = self._parse_varinfo(data)
@@ -307,7 +312,7 @@ class EtaAPI:
         return int(data["#text"])
 
     async def get_switch_state(self, uri):
-        data = await self.get_request("/user/var/" + str(uri))
+        data = await self._get_request("/user/var/" + str(uri))
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["value"]
         return self._parse_switch_state(data)
@@ -378,7 +383,7 @@ class EtaAPI:
         return errors
 
     async def get_errors(self):
-        data = await self.get_request("/user/errors")
+        data = await self._get_request("/user/errors")
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["errors"]["fub"]
         return self._parse_errors(data)

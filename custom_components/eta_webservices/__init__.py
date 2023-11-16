@@ -28,6 +28,9 @@ async def async_setup_entry(
     error_coordinator = ETAErrorUpdateCoordinator(hass, config)
     config["error_update_coordinator"] = error_coordinator
 
+    if entry.options:
+        config.update(entry.options)
+
     await error_coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = config
