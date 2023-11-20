@@ -15,7 +15,8 @@
                 "data": {
                     "chosen_float_sensors": "Sensoren",
                     "chosen_switches": "Schalter",
-                    "chosen_text_sensors": "Zustandssensoren"
+                    "chosen_text_sensors": "Zustandssensoren",
+                    "chosen_writable_sensors": "Schreibbare Sensoren"
                 }
             }
         },
@@ -34,7 +35,8 @@
                 "data": {
                     "chosen_float_sensors": "Sensoren",
                     "chosen_switches": "Schalter",
-                    "chosen_text_sensors": "Zustandssensoren"
+                    "chosen_text_sensors": "Zustandssensoren",
+                    "chosen_writable_sensors": "Schreibbare Sensoren"
                 }
             }
         },

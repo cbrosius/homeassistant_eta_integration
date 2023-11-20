@@ -13,10 +13,17 @@ class ETAValidSwitchValues(TypedDict):
     off_value: int
 
 
+class ETAValidWritableValues(TypedDict):
+    scaled_min_value: float
+    scaled_max_value: float
+    scale_factor: int
+    dec_places: int
+
+
 class ETAEndpoint(TypedDict):
     url: str
     value: float | str
-    valid_values: dict | ETAValidSwitchValues | None
+    valid_values: dict | ETAValidSwitchValues | ETAValidWritableValues | None
     friendly_name: str
     unit: str
     endpoint_type: str
@@ -59,6 +66,12 @@ class EtaAPI:
             "s",
             "°C",
         ]
+
+        self._writable_sensor_units = ["%", "°C", "kg"]
+        # default ranges: -100 - 200 °C
+        # -100 - 100 %
+        # -100000 - 100000 kg
+        #  or: 0 - 100000 kg
 
     def build_uri(self, suffix):
         return "http://" + self._host + ":" + str(self._port) + suffix
@@ -142,13 +155,19 @@ class EtaAPI:
         self._evaluate_xml_dict(raw_dict, uri_dict)
         return uri_dict
 
-    async def get_all_sensors(self, float_dict, switches_dict, text_dict):
+    async def get_all_sensors(
+        self, float_dict, switches_dict, text_dict, writable_dict
+    ):
         if await self.is_correct_api_version():
             # New version with varinfo endpoint detected
-            return await self._get_all_sensors_v12(float_dict, switches_dict, text_dict)
+            return await self._get_all_sensors_v12(
+                float_dict, switches_dict, text_dict, writable_dict
+            )
         else:
             # varinfo not available -> fall back to compatibility mode
-            return await self._get_all_sensors_v11(float_dict, switches_dict, text_dict)
+            return await self._get_all_sensors_v11(
+                float_dict, switches_dict, text_dict, writable_dict
+            )
 
     def _get_friendly_name(self, key: str):
         components = key.split("_")[1:]  # The first part ist always empty
@@ -219,7 +238,9 @@ class EtaAPI:
                 valid_values["off_value"] = endpoint_info["valid_values"][key]
         endpoint_info["valid_values"] = valid_values
 
-    async def _get_all_sensors_v12(self, float_dict, switches_dict, text_dict):
+    async def _get_all_sensors_v12(
+        self, float_dict, switches_dict, text_dict, writable_dict
+    ):
         all_endpoints = await self._get_sensors_dict()
         queried_endpoints = []
         for key in all_endpoints:
@@ -248,6 +269,11 @@ class EtaAPI:
                     value, _ = await self.get_data(all_endpoints[key])
                     endpoint_info["value"] = value
 
+                if self._is_writable(endpoint_info):
+                    # this is checked separately because all writable sensors are registered as both a sensor entity and a number entity
+                    # add a suffix to the unique id to make sure it is still unique in case the sensor is selected in the writable list and in the sensor list
+                    writable_dict[unique_key + "_writable"] = endpoint_info
+
                 if self._is_float_sensor(endpoint_info):
                     float_dict[unique_key] = endpoint_info
                 elif self._is_switch(endpoint_info):
@@ -258,6 +284,15 @@ class EtaAPI:
 
             except:
                 pass
+
+    def _is_writable(self, endpoint_info: ETAEndpoint):
+        # TypedDict does not support isinstance(),
+        # so we have to manually check if we hace the correct dict type
+        # based on the presence of a known key
+        return (
+            endpoint_info["valid_values"] is not None
+            and "scaled_min_value" in endpoint_info["valid_values"]
+        )
 
     def _is_text_sensor(self, endpoint_info: ETAEndpoint):
         return (
@@ -290,6 +325,26 @@ class EtaAPI:
             values = data["validValues"]["value"]
             valid_values = dict(
                 zip([k["@strValue"] for k in values], [int(v["#text"]) for v in values])
+            )
+        elif (
+            is_writable == "1"
+            and "validValues" in data
+            and "min" in data["validValues"]
+            and "#text" in data["validValues"]["min"]
+            and data["@unit"] in self._writable_sensor_units
+        ):
+            min_value = data["validValues"]["min"]["#text"]
+            max_value = data["validValues"]["max"]["#text"]
+            scale_factor = int(data["@scaleFactor"])
+            dec_places = int(data["@decPlaces"])
+
+            min_value = round(float(min_value) / scale_factor, dec_places)
+            max_value = round(float(max_value) / scale_factor, dec_places)
+            valid_values = ETAValidWritableValues(
+                scaled_min_value=min_value,
+                scaled_max_value=max_value,
+                scale_factor=scale_factor,
+                dec_places=dec_places,
             )
 
         return ETAEndpoint(

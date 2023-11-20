@@ -56,7 +56,6 @@ class EtaSwitch(EtaEntity, SwitchEntity):
 
         self._attr_icon = "mdi:power"
 
-        self.uri = endpoint_info["url"]
         self.on_value = endpoint_info["valid_values"]["on_value"]
         self.off_value = endpoint_info["valid_values"]["off_value"]
         self._attr_is_on = False

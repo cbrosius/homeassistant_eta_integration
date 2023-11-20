@@ -2,18 +2,21 @@ import logging
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 
-from .const import DOMAIN
-from .coordinator import ETAErrorUpdateCoordinator
+from .const import DOMAIN, ERROR_UPDATE_COORDINATOR, WRITABLE_UPDATE_COORDINATOR
+from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
 from .services import async_setup_services
+from .const import WRITABLE_DICT, CHOSEN_WRITABLE_SENSORS
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SWITCH,
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.NUMBER,
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: core.HomeAssistant, entry: config_entries.ConfigEntry
@@ -25,13 +28,17 @@ async def async_setup_entry(
     unsub_options_update_listener = entry.add_update_listener(options_update_listener)
     # Store a reference to the unsubscribe function to cleanup if an entry is unloaded.
     config["unsub_options_update_listener"] = unsub_options_update_listener
-    error_coordinator = ETAErrorUpdateCoordinator(hass, config)
-    config["error_update_coordinator"] = error_coordinator
 
     if entry.options:
         config.update(entry.options)
 
+    error_coordinator = ETAErrorUpdateCoordinator(hass, config)
+    writable_coordinator = ETAWritableUpdateCoordinator(hass, config)
+    config[ERROR_UPDATE_COORDINATOR] = error_coordinator
+    config[WRITABLE_UPDATE_COORDINATOR] = writable_coordinator
+
     await error_coordinator.async_config_entry_first_refresh()
+    await writable_coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = config
 
@@ -43,9 +50,20 @@ async def async_setup_entry(
     return True
 
 
-async def async_setup(hass: core.HomeAssistant, config: dict) -> bool:
-    """Set up the eta Custom component from yaml configuration."""
-    hass.data.setdefault(DOMAIN, {})
+async def async_migrate_entry(
+    hass: core.HomeAssistant, config_entry: config_entries.ConfigEntry
+):
+    _LOGGER.debug("Migrating from version %s", config_entry.version)
+    if config_entry.version == 1:
+        new_data = config_entry.data.copy()
+
+        new_data[WRITABLE_DICT] = []
+        new_data[CHOSEN_WRITABLE_SENSORS] = []
+        config_entry.version = 2
+
+        hass.config_entries.async_update_entry(config_entry, data=new_data)
+
+    _LOGGER.info("Migration to version %s successful", config_entry.version)
     return True
 
 

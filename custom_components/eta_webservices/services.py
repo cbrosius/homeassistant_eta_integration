@@ -17,9 +17,10 @@ WRITE_ENDPOINT_SCHEMA = vol.Schema(
         vol.Required("endpoint_url"): cv.string,
         vol.Required("value"): cv.string,
         vol.Optional("begin"): vol.All(vol.Coerce(int), vol.Range(min=0, max=96)),
-        vol.Optional("end"): vol.All(vol.Coerce(int), vol.Range(min=0, max=96))
+        vol.Optional("end"): vol.All(vol.Coerce(int), vol.Range(min=0, max=96)),
     },
 )
+
 
 async def async_setup_services(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
     session = async_get_clientsession(hass)
@@ -36,5 +37,6 @@ async def async_setup_services(hass: HomeAssistant, config_entry: ConfigEntry) -
         if not success:
             raise HomeAssistantError("Could not write value, see log for details")
 
-
-    hass.services.async_register(DOMAIN, "write_value", handle_write, schema=WRITE_ENDPOINT_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, "write_value", handle_write, schema=WRITE_ENDPOINT_SCHEMA
+    )

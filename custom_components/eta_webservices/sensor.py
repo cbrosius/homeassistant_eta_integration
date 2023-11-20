@@ -16,9 +16,9 @@ import logging
 from datetime import timedelta
 
 _LOGGER = logging.getLogger(__name__)
-from .api import ETAEndpoint, EtaAPI, ETAError
-from .coordinator import ETAErrorUpdateCoordinator
-from .entity import EtaEntity, EtaEntityWithCoordinator
+from .api import ETAEndpoint, ETAError
+from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
+from .entity import EtaSensorEntity, EtaErrorEntity, EtaWritableSensorEntity
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -34,8 +34,11 @@ from .const import (
     DOMAIN,
     CHOSEN_FLOAT_SENSORS,
     CHOSEN_TEXT_SENSORS,
+    CHOSEN_WRITABLE_SENSORS,
     FLOAT_DICT,
     TEXT_DICT,
+    ERROR_UPDATE_COORDINATOR,
+    WRITABLE_UPDATE_COORDINATOR,
 )
 
 SCAN_INTERVAL = timedelta(minutes=1)
@@ -49,7 +52,11 @@ async def async_setup_entry(
     """Setup sensors from a config entry created in the integrations UI."""
     config = hass.data[DOMAIN][config_entry.entry_id]
 
+    writable_coordinator = config[WRITABLE_UPDATE_COORDINATOR]
+
     chosen_float_sensors = config[CHOSEN_FLOAT_SENSORS]
+    chosen_writable_sensors = config[CHOSEN_WRITABLE_SENSORS]
+    # sensors don't use a coordinator if they are not also selected as writable endpoints,
     sensors = [
         EtaFloatSensor(
             config,
@@ -58,7 +65,23 @@ async def async_setup_entry(
             config[FLOAT_DICT][entity],
         )
         for entity in chosen_float_sensors
+        if entity + "_writable" not in chosen_writable_sensors
     ]
+    # sensors use a coordinator if they are also selected as writable endpoints,
+    # to be able to update the value immediately if the user writes a new value
+    sensors.extend(
+        [
+            EtaFloatWritableSensor(
+                config,
+                hass,
+                entity,
+                config[FLOAT_DICT][entity],
+                writable_coordinator,
+            )
+            for entity in chosen_float_sensors
+            if entity + "_writable" in chosen_writable_sensors
+        ]
+    )
     chosen_text_sensors = config[CHOSEN_TEXT_SENSORS]
     sensors.extend(
         [
@@ -71,17 +94,40 @@ async def async_setup_entry(
             for entity in chosen_text_sensors
         ]
     )
-    coordinator = config["error_update_coordinator"]
+    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
     sensors.extend(
         [
-            EtaNbrErrorsSensor(config, hass, coordinator),
-            EtaLatestErrorSensor(config, hass, coordinator),
+            EtaNbrErrorsSensor(config, hass, error_coordinator),
+            EtaLatestErrorSensor(config, hass, error_coordinator),
         ]
     )
     async_add_entities(sensors, update_before_add=True)
 
 
-class EtaFloatSensor(EtaEntity, SensorEntity):
+def determine_device_class(unit):
+    unit_dict_eta = {
+        "°C": SensorDeviceClass.TEMPERATURE,
+        "W": SensorDeviceClass.POWER,
+        "A": SensorDeviceClass.CURRENT,
+        "Hz": SensorDeviceClass.FREQUENCY,
+        "Pa": SensorDeviceClass.PRESSURE,
+        "V": SensorDeviceClass.VOLTAGE,
+        "W/m²": SensorDeviceClass.IRRADIANCE,
+        "bar": SensorDeviceClass.PRESSURE,
+        "kW": SensorDeviceClass.POWER,
+        "kWh": SensorDeviceClass.ENERGY,
+        "kg": SensorDeviceClass.WEIGHT,
+        "mV": SensorDeviceClass.VOLTAGE,
+        "s": SensorDeviceClass.DURATION,
+    }
+
+    if unit in unit_dict_eta:
+        return unit_dict_eta[unit]
+
+    return None
+
+
+class EtaFloatSensor(EtaSensorEntity[float]):
     """Representation of a Float Sensor."""
 
     def __init__(
@@ -101,7 +147,7 @@ class EtaFloatSensor(EtaEntity, SensorEntity):
 
         super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
 
-        self._attr_device_class = self.determine_device_class(endpoint_info["unit"])
+        self._attr_device_class = determine_device_class(endpoint_info["unit"])
 
         self._attr_native_unit_of_measurement = endpoint_info["unit"]
         if self._attr_native_unit_of_measurement == "":
@@ -114,42 +160,46 @@ class EtaFloatSensor(EtaEntity, SensorEntity):
 
         self._attr_native_value = float
 
-        self.uri = endpoint_info["url"]
 
-    async def async_update(self):
-        """Fetch new state data for the sensor.
-        This is the only method that should fetch new data for Home Assistant.
-        readme: activate first: https://www.meineta.at/javax.faces.resource/downloads/ETA-RESTful-v1.2.pdf.xhtml?ln=default&v=0
+class EtaFloatWritableSensor(SensorEntity, EtaWritableSensorEntity):
+    """Representation of a Float Sensor."""
+
+    def __init__(
+        self,
+        config: dict,
+        hass: HomeAssistant,
+        unique_id: str,
+        endpoint_info: ETAEndpoint,
+        coordinator: ETAWritableUpdateCoordinator,
+    ) -> None:
         """
-        eta_client = EtaAPI(self.session, self.host, self.port)
-        value, _ = await eta_client.get_data(self.uri)
-        self._attr_native_value = float(value)
+        Initialize sensor.
 
-    @staticmethod
-    def determine_device_class(unit):
-        unit_dict_eta = {
-            "°C": SensorDeviceClass.TEMPERATURE,
-            "W": SensorDeviceClass.POWER,
-            "A": SensorDeviceClass.CURRENT,
-            "Hz": SensorDeviceClass.FREQUENCY,
-            "Pa": SensorDeviceClass.PRESSURE,
-            "V": SensorDeviceClass.VOLTAGE,
-            "W/m²": SensorDeviceClass.IRRADIANCE,
-            "bar": SensorDeviceClass.PRESSURE,
-            "kW": SensorDeviceClass.POWER,
-            "kWh": SensorDeviceClass.ENERGY,
-            "kg": SensorDeviceClass.WEIGHT,
-            "mV": SensorDeviceClass.VOLTAGE,
-            "s": SensorDeviceClass.DURATION,
-        }
+        To show all values: http://192.168.178.75:8080/user/menu
 
-        if unit in unit_dict_eta:
-            return unit_dict_eta[unit]
+        """
+        _LOGGER.info("ETA Integration - init float sensor with coordinator")
 
-        return None
+        super().__init__(
+            coordinator, config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT
+        )
+
+        self._attr_device_class = determine_device_class(endpoint_info["unit"])
+
+        self._attr_native_unit_of_measurement = endpoint_info["unit"]
+        if self._attr_native_unit_of_measurement == "":
+            self._attr_native_unit_of_measurement = None
+
+        if self._attr_device_class == SensorDeviceClass.ENERGY:
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        else:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    def handle_data_updates(self, data: float) -> None:
+        self._attr_native_value = data
 
 
-class EtaTextSensor(EtaEntity, SensorEntity):
+class EtaTextSensor(EtaSensorEntity[str]):
     """Representation of a Text Sensor."""
 
     def __init__(
@@ -171,21 +221,8 @@ class EtaTextSensor(EtaEntity, SensorEntity):
 
         self._attr_native_value = ""
 
-        self.uri = endpoint_info["url"]
 
-    async def async_update(self):
-        """Fetch new state data for the sensor.
-        This is the only method that should fetch new data for Home Assistant.
-        readme: activate first: https://www.meineta.at/javax.faces.resource/downloads/ETA-RESTful-v1.2.pdf.xhtml?ln=default&v=0
-        """
-        eta_client = EtaAPI(self.session, self.host, self.port)
-        value, _ = await eta_client.get_data(self.uri)
-        self._attr_native_value = value
-
-
-class EtaNbrErrorsSensor(
-    SensorEntity, EtaEntityWithCoordinator[ETAErrorUpdateCoordinator]
-):
+class EtaNbrErrorsSensor(SensorEntity, EtaErrorEntity):
     """Representation of a sensor showing the number of active errors."""
 
     def __init__(
@@ -209,9 +246,7 @@ class EtaNbrErrorsSensor(
         self._attr_native_value = len(data)
 
 
-class EtaLatestErrorSensor(
-    SensorEntity, EtaEntityWithCoordinator[ETAErrorUpdateCoordinator]
-):
+class EtaLatestErrorSensor(SensorEntity, EtaErrorEntity):
     """Representation of a sensor showing the latest active error."""
 
     def __init__(

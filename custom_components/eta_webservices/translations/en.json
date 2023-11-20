@@ -15,7 +15,8 @@
                 "data": {
                     "chosen_float_sensors": "Possible sensors",
                     "chosen_switches": "Possible switches",
-                    "chosen_text_sensors": "Possible state sensors"
+                    "chosen_text_sensors": "Possible state sensors",
+                    "chosen_writable_sensors": "Possible writable sensors"
                 }
             }
         },
@@ -34,7 +35,8 @@
                 "data": {
                     "chosen_float_sensors": "Possible sensors",
                     "chosen_switches": "Possible switches",
-                    "chosen_text_sensors": "Possible state sensors"
+                    "chosen_text_sensors": "Possible state sensors",
+                    "chosen_writable_sensors": "Possible writable sensors"
                 }
             }
         },

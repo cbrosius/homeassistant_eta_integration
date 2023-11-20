@@ -10,17 +10,18 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
-from .api import EtaAPI, ETAError
+from .const import DOMAIN, WRITABLE_DICT, CHOSEN_WRITABLE_SENSORS
+from .api import EtaAPI, ETAError, ETAEndpoint
 
+DATA_SCAN_INTERVAL = timedelta(minutes=1)
 # the error endpoint doesn't have to be updated as often because we don't expect any updates most of the time
-SCAN_INTERVAL = timedelta(minutes=2)
+ERROR_SCAN_INTERVAL = timedelta(minutes=2)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
-    """Class to manage fetching data from the Airzone device."""
+    """Class to manage fetching error data from the ETA terminal."""
 
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
         """Initialize."""
@@ -33,7 +34,7 @@ class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=SCAN_INTERVAL,
+            update_interval=ERROR_SCAN_INTERVAL,
         )
 
     def _handle_error_events(self, new_errors):
@@ -62,3 +63,38 @@ class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
             errors = await eta_client.get_errors()
             self._handle_error_events(errors)
             return errors
+
+
+class ETAWritableUpdateCoordinator(DataUpdateCoordinator[dict]):
+    """Class to manage fetching data from the ETA terminal."""
+
+    def __init__(self, hass: HomeAssistant, config: dict) -> None:
+        """Initialize."""
+
+        self.host = config.get(CONF_HOST)
+        self.port = config.get(CONF_PORT)
+        self.session = async_get_clientsession(hass)
+        self.chosen_writable_sensors: list[str] = config[CHOSEN_WRITABLE_SENSORS]
+        self.all_writable_sensors: dict[str, ETAEndpoint] = config[WRITABLE_DICT]
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=DATA_SCAN_INTERVAL,
+        )
+
+    async def _async_update_data(self) -> dict:
+        """Update data via library."""
+        data = {}
+        eta_client = EtaAPI(self.session, self.host, self.port)
+
+        for sensor in self.chosen_writable_sensors:
+            async with timeout(10):
+                value, _ = await eta_client.get_data(
+                    self.all_writable_sensors[sensor]["url"]
+                )
+                data[sensor] = value
+                data[sensor.removesuffix("_writable")] = value
+
+        return data

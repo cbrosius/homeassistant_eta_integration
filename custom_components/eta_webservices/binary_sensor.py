@@ -4,7 +4,7 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 from .coordinator import ETAErrorUpdateCoordinator
-from .entity import EtaEntityWithCoordinator
+from .entity import EtaErrorEntity
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -16,9 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant import config_entries
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.const import CONF_HOST
-from .const import (
-    DOMAIN,
-)
+from .const import DOMAIN, ERROR_UPDATE_COORDINATOR
 
 
 async def async_setup_entry(
@@ -29,15 +27,13 @@ async def async_setup_entry(
     """Setup error sensor"""
     config = hass.data[DOMAIN][config_entry.entry_id]
 
-    coordinator = config["error_update_coordinator"]
+    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
 
-    sensors = [EtaErrorSensor(config, hass, coordinator)]
+    sensors = [EtaErrorSensor(config, hass, error_coordinator)]
     async_add_entities(sensors, update_before_add=True)
 
 
-class EtaErrorSensor(
-    BinarySensorEntity, EtaEntityWithCoordinator[ETAErrorUpdateCoordinator]
-):
+class EtaErrorSensor(BinarySensorEntity, EtaErrorEntity):
     """Representation of a Sensor."""
 
     def __init__(
@@ -54,12 +50,11 @@ class EtaErrorSensor(
         super().__init__(coordinator, config, hass, ENTITY_ID_FORMAT, "_errors")
 
         self._attr_has_entity_name = True
+        self._attr_translation_key = "state_sensor"
 
         self._attr_device_class = BinarySensorDeviceClass.PROBLEM
 
         host = config.get(CONF_HOST)
-
-        self._attr_translation_key = "state_sensor"
 
         # replace the unique id and entity id to keep the entity backwards compatible
         self._attr_unique_id = "eta_" + host.replace(".", "_") + "_errors"

@@ -15,16 +15,18 @@ from .const import (
     FLOAT_DICT,
     SWITCHES_DICT,
     TEXT_DICT,
+    WRITABLE_DICT,
     CHOSEN_FLOAT_SENSORS,
     CHOSEN_SWITCHES,
     CHOSEN_TEXT_SENSORS,
+    CHOSEN_WRITABLE_SENSORS,
 )
 
 
 class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Eta."""
 
-    VERSION = 1
+    VERSION = 2
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     def __init__(self) -> None:
@@ -58,6 +60,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     self.data[FLOAT_DICT],
                     self.data[SWITCHES_DICT],
                     self.data[TEXT_DICT],
+                    self.data[WRITABLE_DICT],
                 ) = await self._get_possible_endpoints(
                     user_input[CONF_HOST], user_input[CONF_PORT]
                 )
@@ -84,6 +87,9 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self.data[CHOSEN_FLOAT_SENSORS] = user_input.get(CHOSEN_FLOAT_SENSORS, [])
             self.data[CHOSEN_SWITCHES] = user_input.get(CHOSEN_SWITCHES, [])
             self.data[CHOSEN_TEXT_SENSORS] = user_input.get(CHOSEN_TEXT_SENSORS, [])
+            self.data[CHOSEN_WRITABLE_SENSORS] = user_input.get(
+                CHOSEN_WRITABLE_SENSORS, []
+            )
 
             # User is done, create the config entry.
             return self.async_create_entry(
@@ -117,6 +123,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         sensors_dict: dict[str, ETAEndpoint] = self.data[FLOAT_DICT]
         switches_dict: dict[str, ETAEndpoint] = self.data[SWITCHES_DICT]
         text_dict: dict[str, ETAEndpoint] = self.data[TEXT_DICT]
+        writable_dict: dict[str, ETAEndpoint] = self.data[WRITABLE_DICT]
 
         return self.async_show_form(
             step_id="select_entities",
@@ -161,6 +168,19 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             multiple=True,
                         )
                     ),
+                    vol.Optional(CHOSEN_WRITABLE_SENSORS): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=key,
+                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit']})",
+                                )
+                                for key in writable_dict.keys()
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            multiple=True,
+                        )
+                    ),
                 }
             ),
             errors=self._errors,
@@ -172,9 +192,12 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         float_dict = {}
         switches_dict = {}
         text_dict = {}
-        await eta_client.get_all_sensors(float_dict, switches_dict, text_dict)
+        writable_dict = {}
+        await eta_client.get_all_sensors(
+            float_dict, switches_dict, text_dict, writable_dict
+        )
 
-        return float_dict, switches_dict, text_dict
+        return float_dict, switches_dict, text_dict, writable_dict
 
     async def _test_url(self, host, port):
         """Return true if host port is valid."""
@@ -203,8 +226,28 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         self.data = {}
         self._errors = {}
 
+    async def _get_possible_endpoints(self, host, port):
+        session = async_get_clientsession(self.hass)
+        eta_client = EtaAPI(session, host, port)
+        float_dict = {}
+        switches_dict = {}
+        text_dict = {}
+        writable_dict = {}
+        await eta_client.get_all_sensors(
+            float_dict, switches_dict, text_dict, writable_dict
+        )
+
+        return float_dict, switches_dict, text_dict, writable_dict
+
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         self.data = self.hass.data[DOMAIN][self.config_entry.entry_id]
+
+        # query the list of writable sensors if it is currently empty
+        # this happens if a user updates from config v1 (pre-writable-sensors) to v2
+        if len(self.data[WRITABLE_DICT]) == 0:
+            _, _, _, self.data[WRITABLE_DICT] = await self._get_possible_endpoints(
+                self.data[CONF_HOST], self.data[CONF_PORT]
+            )
         return await self.async_step_user()
 
     async def async_step_user(self, user_input=None):
@@ -222,6 +265,9 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         }
         entity_map_text_sensors = {
             e.unique_id: e for e in entries if e.unique_id in self.data[TEXT_DICT]
+        }
+        entity_map_writable_sensors = {
+            e.unique_id: e for e in entries if e.unique_id in self.data[WRITABLE_DICT]
         }
 
         if user_input is not None:
@@ -244,6 +290,13 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                     if entity_id not in user_input[CHOSEN_TEXT_SENSORS]
                 ]
             )
+            removed_entities.extend(
+                [
+                    entity_map_writable_sensors[entity_id]
+                    for entity_id in entity_map_writable_sensors.keys()
+                    if entity_id not in user_input[CHOSEN_WRITABLE_SENSORS]
+                ]
+            )
             for e in removed_entities:
                 # Unregister from HA
                 entity_registry.async_remove(e.entity_id)
@@ -252,9 +305,11 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                 CHOSEN_FLOAT_SENSORS: user_input[CHOSEN_FLOAT_SENSORS],
                 CHOSEN_SWITCHES: user_input[CHOSEN_SWITCHES],
                 CHOSEN_TEXT_SENSORS: user_input[CHOSEN_TEXT_SENSORS],
+                CHOSEN_WRITABLE_SENSORS: user_input[CHOSEN_WRITABLE_SENSORS],
                 FLOAT_DICT: self.data[FLOAT_DICT],
                 SWITCHES_DICT: self.data[SWITCHES_DICT],
                 TEXT_DICT: self.data[TEXT_DICT],
+                WRITABLE_DICT: self.data[WRITABLE_DICT],
                 CONF_HOST: self.data[CONF_HOST],
                 CONF_PORT: self.data[CONF_PORT],
             }
@@ -264,6 +319,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             [key for key in entity_map_sensors.keys()],
             [key for key in entity_map_switches.keys()],
             [key for key in entity_map_text_sensors.keys()],
+            [key for key in entity_map_writable_sensors.keys()],
         )
 
     async def _show_config_form_endpoint(
@@ -271,11 +327,13 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         current_chosen_sensors,
         current_chosen_switches,
         current_chosen_text_sensors,
+        current_chosen_writable_sensors,
     ):
         """Show the configuration form to select which endpoints should become entities."""
         sensors_dict: dict[str, ETAEndpoint] = self.data[FLOAT_DICT]
         switches_dict: dict[str, ETAEndpoint] = self.data[SWITCHES_DICT]
         text_dict: dict[str, ETAEndpoint] = self.data[TEXT_DICT]
+        writable_dict: dict[str, ETAEndpoint] = self.data[WRITABLE_DICT]
 
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
@@ -296,6 +354,10 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         for entity in text_dict:
             text_dict[entity]["value"], _ = await eta_client.get_data(
                 text_dict[entity]["url"]
+            )
+        for entity in writable_dict:
+            writable_dict[entity]["value"], _ = await eta_client.get_data(
+                writable_dict[entity]["url"]
             )
 
         return self.async_show_form(
@@ -342,6 +404,21 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                                     label=f"{text_dict[key]['friendly_name']} ({text_dict[key]['value']})",
                                 )
                                 for key in text_dict.keys()
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CHOSEN_WRITABLE_SENSORS, default=current_chosen_writable_sensors
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=key,
+                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit']})",
+                                )
+                                for key in writable_dict.keys()
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,

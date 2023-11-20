@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN
+from .const import DOMAIN, ERROR_UPDATE_COORDINATOR
 from .coordinator import ETAErrorUpdateCoordinator
 from .utils import create_device_info
 
@@ -18,10 +18,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     config = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator = config["error_update_coordinator"]
+    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
 
     buttons = [
-        EtaResendErrorEventsButton(config, hass, coordinator),
+        EtaResendErrorEventsButton(config, hass, error_coordinator),
     ]
 
     async_add_entities(buttons)
