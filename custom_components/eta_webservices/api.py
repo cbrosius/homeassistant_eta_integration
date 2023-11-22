@@ -68,10 +68,26 @@ class EtaAPI:
         ]
 
         self._writable_sensor_units = ["%", "°C", "kg"]
-        # default ranges: -100 - 200 °C
-        # -100 - 100 %
-        # -100000 - 100000 kg
-        #  or: 0 - 100000 kg
+        self._default_valid_writable_values = {
+            "%": ETAValidWritableValues(
+                scaled_min_value=-100,
+                scaled_max_value=100,
+                scale_factor=1,
+                dec_places=0,
+            ),
+            "°C": ETAValidWritableValues(
+                scaled_min_value=-100,
+                scaled_max_value=200,
+                scale_factor=1,
+                dec_places=0,
+            ),
+            "kg": ETAValidWritableValues(
+                scaled_min_value=-100000,
+                scaled_max_value=100000,
+                scale_factor=1,
+                dec_places=0,
+            ),
+        }
 
     def build_uri(self, suffix):
         return "http://" + self._host + ":" + str(self._port) + suffix
@@ -137,7 +153,7 @@ class EtaAPI:
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["value"]
         value, unit = self._parse_data(data)
-        return value, unit, data["#text"]
+        return value, unit, data
 
     async def get_menu(self):
         data = await self._get_request("/user/menu")
@@ -173,7 +189,7 @@ class EtaAPI:
         components = key.split("_")[1:]  # The first part ist always empty
         return " > ".join(components)
 
-    def _is_switch_v11(self, endpoint_info: ETAEndpoint, raw_value):
+    def _is_switch_v11(self, endpoint_info: ETAEndpoint, raw_value: str):
         if endpoint_info["unit"] == "" and raw_value in ("1802", "1803"):
             return True
         return False
@@ -183,7 +199,27 @@ class EtaAPI:
             on_value=1803, off_value=1802
         )
 
-    async def _get_all_sensors_v11(self, float_dict, switches_dict, text_dict):
+    def _is_writable_v11(self, endpoint_info: ETAEndpoint):
+        # API v1.1 lacks the necessary function to query detailed info about the endpoint
+        # that's why we just check the unit to see if it is in the list of acceptable writable sensor units
+        if endpoint_info["unit"] in self._writable_sensor_units:
+            return True
+        return False
+
+    def _parse_valid_writable_values_v11(
+        self, endpoint_info: ETAEndpoint, raw_dict: dict
+    ):
+        # API v1.1 lacks the necessary function to query detailed info about the endpoint
+        # that's why we have to assume sensible valid ranges for the endpoints based on their unit
+        endpoint_info["valid_values"] = self._default_valid_writable_values[
+            endpoint_info["unit"]
+        ]
+        endpoint_info["valid_values"]["dec_places"] = int(raw_dict["@decPlaces"])
+        endpoint_info["valid_values"]["scale_factor"] = int(raw_dict["@scaleFactor"])
+
+    async def _get_all_sensors_v11(
+        self, float_dict, switches_dict, text_dict, writable_dict
+    ):
         all_endpoints = await self._get_sensors_dict()
         queried_endpoints = []
         for key in all_endpoints:
@@ -194,7 +230,7 @@ class EtaAPI:
 
                 queried_endpoints.append(all_endpoints[key])
 
-                value, unit, raw_value = await self._get_data_plus_raw(
+                value, unit, raw_dict = await self._get_data_plus_raw(
                     all_endpoints[key]
                 )
 
@@ -216,14 +252,20 @@ class EtaAPI:
                     + key.lower().replace(" ", "_")
                 )
 
+                if self._is_writable_v11(endpoint_info):
+                    # this is checked separately because all writable sensors are registered as both a sensor entity and a number entity
+                    # add a suffix to the unique id to make sure it is still unique in case the sensor is selected in the writable list and in the sensor list
+                    self._parse_valid_writable_values_v11(endpoint_info, raw_dict)
+                    writable_dict[unique_key + "_writable"] = endpoint_info
+
                 if self._is_float_sensor(endpoint_info):
                     float_dict[unique_key] = endpoint_info
-                elif self._is_switch_v11(endpoint_info, raw_value):
+                elif self._is_switch_v11(endpoint_info, raw_dict["#text"]):
                     self._parse_switch_values_v11(endpoint_info)
                     switches_dict[unique_key] = endpoint_info
                 elif self._is_text_sensor(endpoint_info) and value != "":
                     # Ignore enpoints with an empty value
-                    # This has to be the last branch for the fallback to work
+                    # This has to be the last branch for the above fallback to work
                     text_dict[unique_key] = endpoint_info
 
             except:
