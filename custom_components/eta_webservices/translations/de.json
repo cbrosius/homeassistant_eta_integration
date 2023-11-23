@@ -15,7 +15,8 @@
                 "data": {
                     "chosen_float_sensors": "Sensoren",
                     "chosen_switches": "Schalter",
-                    "chosen_text_sensors": "Zustandssensoren"
+                    "chosen_text_sensors": "Zustandssensoren",
+                    "chosen_writable_sensors": "Schreibbare Sensoren"
                 }
             }
         },
@@ -34,9 +35,13 @@
                 "data": {
                     "chosen_float_sensors": "Sensoren",
                     "chosen_switches": "Schalter",
-                    "chosen_text_sensors": "Zustandssensoren"
+                    "chosen_text_sensors": "Zustandssensoren",
+                    "chosen_writable_sensors": "Schreibbare Sensoren"
                 }
             }
+        },
+        "error": {
+            "wrong_api_version": "API Version des ETA Geräts ist zu alt. Einige Entitäten werden möglicherweise nicht oder falsch erkannt. Aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware, falls möglich."
         }
     },
     "entity": {
@@ -56,6 +61,30 @@
             },
             "latest_error_sensor": {
                 "name": "Neuester aktiver Fehler"
+            }
+        }
+    },
+    "services": {
+        "write_value": {
+            "name": "Wert setzen",
+            "description": "Setzt den Wert eines Endpunkts (Achtung: Nur unter großer Vorsicht verwenden! Ein falscher Wert kann die ETA Heizung unbrauchbar machen.)",
+            "fields": {
+                "endpoint_url": {
+                    "name": "Endpunkt URI",
+                    "description": "URI des Endpunkts (nur die Zahlenfolge, ohne Host und Port) (siehe http://[eta_host]:[eta_port]/user/menu)"
+                },
+                "value": {
+                    "name": "Wert",
+                    "description": "Zu setzender Wert"
+                },
+                "begin": {
+                    "name": "Startzeit",
+                    "description": "Optionale Startzeit in 15 Minuten Schritten seit Mitternacht"
+                },
+                "end": {
+                    "name": "Endzeit",
+                    "description": "Optionale Endzeit in 15 Minuten Schritten seit Mitternacht"
+                }
             }
         }
     }

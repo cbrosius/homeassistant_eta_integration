@@ -15,7 +15,8 @@
                 "data": {
                     "chosen_float_sensors": "Possible sensors",
                     "chosen_switches": "Possible switches",
-                    "chosen_text_sensors": "Possible state sensors"
+                    "chosen_text_sensors": "Possible state sensors",
+                    "chosen_writable_sensors": "Possible writable sensors"
                 }
             }
         },
@@ -34,9 +35,13 @@
                 "data": {
                     "chosen_float_sensors": "Possible sensors",
                     "chosen_switches": "Possible switches",
-                    "chosen_text_sensors": "Possible state sensors"
+                    "chosen_text_sensors": "Possible state sensors",
+                    "chosen_writable_sensors": "Possible writable sensors"
                 }
             }
+        },
+        "error": {
+            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version."
         }
     },
     "entity": {
@@ -56,6 +61,30 @@
             },
             "latest_error_sensor": {
                 "name": "Latest active error"
+            }
+        }
+    },
+    "services": {
+        "write_value": {
+            "name": "Set value",
+            "description": "Sets the value of an endpoint (Attention: Exercise caution! A wrong value can render your ETA heating unit unusable.)",
+            "fields": {
+                "endpoint_url": {
+                    "name": "Endpoint URI",
+                    "description": "URI of the endpoint (only the numeric part, without host and port) (see http://[eta_host]:[eta_port]/user/menu)"
+                },
+                "value": {
+                    "name": "Value",
+                    "description": "The value to be set"
+                },
+                "begin": {
+                    "name": "Begin",
+                    "description": "Optional start time in 15 minute increments since midnight"
+                },
+                "end": {
+                    "name": "End",
+                    "description": "Optional end time in 15 minute increments since midnight"
+                }
             }
         }
     }
