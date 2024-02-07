@@ -233,6 +233,7 @@ class EtaNbrErrorsSensor(SensorEntity, EtaErrorEntity):
         )
 
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_state_class = SensorStateClass.MEASUREMENT
 
         self._attr_native_value = float
         self._attr_native_unit_of_measurement = None

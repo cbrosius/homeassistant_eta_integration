@@ -21,6 +21,12 @@ This is a fork of [nigl's repo](https://github.com/nigl/homeassistant_eta_integr
 -   Implemented a custom service to set the value of an endpoint ([details](#set-value-service))
 -   Implemented writable sensors ([details](#writable-sensors))
 
+## Screenshots
+
+|            Sensors             |             Controls             |              Diagnostic              |
+| :----------------------------: | :------------------------------: | :----------------------------------: |
+| ![Sensors](images/sensors.png) | ![Controls](images/controls.png) | ![Diagnostic](images/diagnostic.png) |
+
 ## Installation
 
 This integration can be configured directly in Home Assistant via HACS:
@@ -32,7 +38,10 @@ This integration can be configured directly in Home Assistant via HACS:
 1. Then search for the new added `ETA` integration, click on it and the click on the button `Download` on the bottom right corner
 1. Restart Home Assistant when it says to.
 1. In Home Assistant, go to `Configuration` -> `Integrations` -> Click `+ Add Integration`
-   Search for `Eta Sensors` and follow the instructions. - **Note**: After entering the host and port the integration will query information about every possible endpoint. This step can take a very long time, so please have some patience. - **Note**: This only affects the configuration step when adding the integration. After the integration has been configured, only the selected entities will be queried. - **Note**: The integration will also query the current sensor values of all endpoints when clicking on `Configure`. This will also take a bit of time, but not as much as when adding the integration for the first time.
+   Search for `Eta Sensors` and follow the instructions.
+    - **Note**: After entering the host and port the integration will query information about every possible endpoint. This step can take a very long time, so please have some patience.
+    - **Note**: This only affects the configuration step when adding the integration. After the integration has been configured, only the selected entities will be queried.
+    - **Note**: The integration will also query the current sensor values of all endpoints when clicking on `Configure`. This will also take a bit of time, but not as much as when adding the integration for the first time.
 
 ## General Notes
 
@@ -114,9 +123,9 @@ If you are clicking this button for the first time after updating this integrati
 ### Caveats on APi v1.1
 
 API v1.1 does not have some endpoints, which are used to query the valid values of writable sensors.
-If your terminal is on this API version, the integration will fall back to a compatibility mode and assume the valid value ranges for these sensors.
+If your terminal is on this API version, the integration will fall back to a compatibility mode and guess the valid value ranges for these sensors.
 
-Also, on API v1.1 it is not possible to query if a sensor is writable at all! This integration therefore shows all sensors in the list of writable sensors, and the user has to be choose which are really writable.
+Also, on API v1.1 it is not possible to query if a sensor is writable at all! This integration therefore shows all sensors in the list of writable sensors, and the user has to choose the ones which are actually writable.
 
 ### Legal Notes
 
@@ -139,6 +148,31 @@ E.g. If an endpoint has a scaleFactor of 10 and you want set the value 55, you h
 1. Some endpoints, such as the heating windows, require a begin and end time in addition to the value
     - These values have to be specified in 15 minute increments since midnight!
         - E.g. a time of 15:30 (3:30pm) would be a value of `62` (`15*4+2` or `(15*60+30)/15`)
+
+## Integrating the ETA Unit into the Energy Dashboard
+
+You can add the ETA Heating Unit into the Energy Dashboard by converting the total pellets consumption into kWh, and adding that as a gas heater.
+
+To convert the consumption you have to add a custom template sensor to your `configuration.yaml` file:
+
+```
+# Convert pellet consumption (kg) to energy consumption (kWh)
+template:
+  - sensor:
+    - name: eta_total_energy
+      unit_of_measurement: kWh
+      device_class: energy
+      state_class: total_increasing
+      state: >
+        {{ states('sensor.eta_<IP>_kessel_zahlerstande_gesamtverbrauch') | float(default=0.0) | multiply(4.8) | round(1) }}
+```
+
+Make sure to replace the `&lt;IP> field with the Ip address of your ETA unit. You can also check the sensor id by going to the options of the sensor, and
+
+You can also use the web interface to create a template helper:
+![template helper](images/template_sensor.png)
+
+You can then add your ETA heating unit to your Energy Dashboard by adding this new sensor to the list of gas sources.
 
 ## Future Development
 
