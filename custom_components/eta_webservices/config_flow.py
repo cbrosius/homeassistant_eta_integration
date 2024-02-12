@@ -1,4 +1,5 @@
 """Adds config flow for Blueprint."""
+import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -9,6 +10,7 @@ from homeassistant.helpers.entity_registry import (
     async_entries_for_config_entry,
     async_get,
 )
+import homeassistant.helpers.config_validation as cv
 from .api import ETAEndpoint, EtaAPI
 from .const import (
     DOMAIN,
@@ -20,13 +22,16 @@ from .const import (
     CHOSEN_SWITCHES,
     CHOSEN_TEXT_SENSORS,
     CHOSEN_WRITABLE_SENSORS,
+    FORCE_LEGACY_MODE,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Eta."""
 
-    VERSION = 2
+    VERSION = 3
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     def __init__(self) -> None:
@@ -54,15 +59,20 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 if not is_correct_api_version:
                     self._errors["base"] = "wrong_api_version"
+                elif user_input[FORCE_LEGACY_MODE]:
+                    self._errors["base"] = "legacy_mode_selected"
 
                 self.data = user_input
+
                 (
                     self.data[FLOAT_DICT],
                     self.data[SWITCHES_DICT],
                     self.data[TEXT_DICT],
                     self.data[WRITABLE_DICT],
                 ) = await self._get_possible_endpoints(
-                    user_input[CONF_HOST], user_input[CONF_PORT]
+                    user_input[CONF_HOST],
+                    user_input[CONF_PORT],
+                    user_input[FORCE_LEGACY_MODE],
                 )
 
                 return await self.async_step_select_entities()
@@ -103,9 +113,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         return EtaOptionsFlowHandler(config_entry)
 
-    async def _show_config_form_user(
-        self, user_input
-    ):  # pylint: disable=unused-argument
+    async def _show_config_form_user(self, user_input):  # pylint: disable=unused-argument
         """Show the configuration form to edit host and port data."""
         return self.async_show_form(
             step_id="user",
@@ -113,6 +121,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_HOST, default=user_input[CONF_HOST]): str,
                     vol.Required(CONF_PORT, default=user_input[CONF_PORT]): str,
+                    vol.Required(FORCE_LEGACY_MODE, default=False): cv.boolean,
                 }
             ),
             errors=self._errors,
@@ -186,7 +195,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def _get_possible_endpoints(self, host, port):
+    async def _get_possible_endpoints(self, host, port, force_legacy_mode):
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, host, port)
         float_dict = {}
@@ -194,7 +203,15 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         text_dict = {}
         writable_dict = {}
         await eta_client.get_all_sensors(
-            float_dict, switches_dict, text_dict, writable_dict
+            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict
+        )
+
+        _LOGGER.debug(
+            "Queried sensors: Number of float sensors: %i, Number of switches: %i, Number of text sensors: %i, Number of writable sensors: %i",
+            len(float_dict),
+            len(switches_dict),
+            len(text_dict),
+            len(writable_dict),
         )
 
         return float_dict, switches_dict, text_dict, writable_dict
@@ -226,7 +243,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         self.data = {}
         self._errors = {}
 
-    async def _get_possible_endpoints(self, host, port):
+    async def _get_possible_endpoints(self, host, port, force_legacy_mode):
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, host, port)
         float_dict = {}
@@ -234,7 +251,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         text_dict = {}
         writable_dict = {}
         await eta_client.get_all_sensors(
-            float_dict, switches_dict, text_dict, writable_dict
+            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict
         )
 
         return float_dict, switches_dict, text_dict, writable_dict
@@ -246,7 +263,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         # this happens if a user updates from config v1 (pre-writable-sensors) to v2
         if len(self.data[WRITABLE_DICT]) == 0:
             _, _, _, self.data[WRITABLE_DICT] = await self._get_possible_endpoints(
-                self.data[CONF_HOST], self.data[CONF_PORT]
+                self.data[CONF_HOST], self.data[CONF_PORT], self.data[FORCE_LEGACY_MODE]
             )
         return await self.async_step_user()
 

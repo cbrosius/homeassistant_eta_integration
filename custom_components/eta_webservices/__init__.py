@@ -5,7 +5,7 @@ from homeassistant.const import Platform
 from .const import DOMAIN, ERROR_UPDATE_COORDINATOR, WRITABLE_UPDATE_COORDINATOR
 from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
 from .services import async_setup_services
-from .const import WRITABLE_DICT, CHOSEN_WRITABLE_SENSORS
+from .const import WRITABLE_DICT, CHOSEN_WRITABLE_SENSORS, FORCE_LEGACY_MODE
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -59,7 +59,15 @@ async def async_migrate_entry(
 
         new_data[WRITABLE_DICT] = []
         new_data[CHOSEN_WRITABLE_SENSORS] = []
-        config_entry.version = 2
+        new_data[FORCE_LEGACY_MODE] = False
+        config_entry.version = 3
+
+        hass.config_entries.async_update_entry(config_entry, data=new_data)
+    elif config_entry.version == 2:
+        new_data = config_entry.data.copy()
+
+        new_data[FORCE_LEGACY_MODE] = False
+        config_entry.version = 3
 
         hass.config_entries.async_update_entry(config_entry, data=new_data)
 

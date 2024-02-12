@@ -12,6 +12,8 @@ CHOSEN_SWITCHES = "chosen_switches"
 CHOSEN_TEXT_SENSORS = "chosen_text_sensors"
 CHOSEN_WRITABLE_SENSORS = "chosen_writable_sensors"
 
+FORCE_LEGACY_MODE = "force_legacy_mode"
+
 ERROR_UPDATE_COORDINATOR = "error_update_coordinator"
 WRITABLE_UPDATE_COORDINATOR = "writable_update_coordinator"
 

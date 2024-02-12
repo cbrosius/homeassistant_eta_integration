@@ -3,10 +3,11 @@
         "step": {
             "user": {
                 "title": "ETA Schritt 1",
-                "description": "Gib die Netzwerkadresse deines ETA Geräts ein. Wenn du Hilfe bei der Konfiguration brauchst, schau hier nach: https://github.com/Tidone/homeassistant_eta_integration \n\n Info: Abhängig von der Anzahl der möglichen Endpunkte deinse ETA Geräts kann die Abfrage eine lange Zeit dauern! Bitte hab etwas Geduld nachdem du auf Absenden gedrückt hast.",
+                "description": "Gib die Netzwerkadresse deines ETA Geräts ein. Wenn du Hilfe bei der Konfiguration brauchst, schau hier nach: https://github.com/Tidone/homeassistant_eta_integration \n\n Info: Abhängig von der Anzahl der möglichen Endpunkte deinse ETA Geräts kann die Abfrage eine lange Zeit dauern! Bitte hab etwas Geduld nachdem du auf Absenden gedrückt hast.\n\nWähle den alte API Modus falls du Probleme mit dem neuen Modus hast.",
                 "data": {
                     "host": "Host",
-                    "port": "Port"
+                    "port": "Port",
+                    "force_legacy_mode": "Erzwinge die alte API Version"
                 }
             },
             "select_entities": {
@@ -23,7 +24,8 @@
         "error": {
             "unknown_host": "Konnte keine Verbindung zum ETA Gerät aufbauen: Falscher Host oder Port",
             "no_eta_endpoint": "Konnte keinen ETA Endpunkt finden. Hast du die Webservices in meinETA aktiviert?",
-            "wrong_api_version": "API Version des ETA Geräts ist zu alt. Einige Entitäten werden möglicherweise nicht oder falsch erkannt. Aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware, falls möglich."
+            "wrong_api_version": "API Version des ETA Geräts ist zu alt. Einige Entitäten werden möglicherweise nicht oder falsch erkannt. Aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware, falls möglich.",
+            "legacy_mode_selected": "Alter API Modus wird verwendet. Einige Entitäten werden möglicherweise nicht oder falsch erkannt."
         },
         "abort": {
             "single_instance_allowed": "Host bereits konfiguriert. Nur eine Instanz ist erlaubt."

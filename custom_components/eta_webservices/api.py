@@ -130,6 +130,7 @@ class EtaAPI:
         return eta_version >= required_version
 
     def _parse_data(self, data):
+        _LOGGER.debug("Parsing data %s", data)
         unit = data["@unit"]
         if unit in self._float_sensor_units:
             scale_factor = int(data["@scaleFactor"])
@@ -172,14 +173,16 @@ class EtaAPI:
         return uri_dict
 
     async def get_all_sensors(
-        self, float_dict, switches_dict, text_dict, writable_dict
+        self, force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict
     ):
-        if await self.is_correct_api_version():
+        if not force_legacy_mode and await self.is_correct_api_version():
+            _LOGGER.debug("Get all sensors - API v1.2")
             # New version with varinfo endpoint detected
             return await self._get_all_sensors_v12(
                 float_dict, switches_dict, text_dict, writable_dict
             )
         else:
+            _LOGGER.debug("Get all sensors - API v1.1")
             # varinfo not available -> fall back to compatibility mode
             return await self._get_all_sensors_v11(
                 float_dict, switches_dict, text_dict, writable_dict
@@ -221,12 +224,16 @@ class EtaAPI:
         self, float_dict, switches_dict, text_dict, writable_dict
     ):
         all_endpoints = await self._get_sensors_dict()
+        _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
         queried_endpoints = []
         for key in all_endpoints:
             try:
                 if all_endpoints[key] in queried_endpoints:
+                    _LOGGER.debug("Skipping duplicate endpoint %s", all_endpoints[key])
                     # ignore duplicate endpoints
                     continue
+
+                _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
 
                 queried_endpoints.append(all_endpoints[key])
 
@@ -253,23 +260,29 @@ class EtaAPI:
                 )
 
                 if self._is_writable_v11(endpoint_info):
+                    _LOGGER.debug("Adding as writable sensor")
                     # this is checked separately because all writable sensors are registered as both a sensor entity and a number entity
                     # add a suffix to the unique id to make sure it is still unique in case the sensor is selected in the writable list and in the sensor list
                     self._parse_valid_writable_values_v11(endpoint_info, raw_dict)
                     writable_dict[unique_key + "_writable"] = endpoint_info
 
                 if self._is_float_sensor(endpoint_info):
+                    _LOGGER.debug("Adding as float sensor")
                     float_dict[unique_key] = endpoint_info
                 elif self._is_switch_v11(endpoint_info, raw_dict["#text"]):
+                    _LOGGER.debug("Adding as switch")
                     self._parse_switch_values_v11(endpoint_info)
                     switches_dict[unique_key] = endpoint_info
                 elif self._is_text_sensor(endpoint_info) and value != "":
+                    _LOGGER.debug("Adding as text sensor")
                     # Ignore enpoints with an empty value
                     # This has to be the last branch for the above fallback to work
                     text_dict[unique_key] = endpoint_info
+                else:
+                    _LOGGER.debug("Not adding endpoint: Unknown type")
 
-            except:
-                pass
+            except Exception:
+                _LOGGER.debug("Invalid endpoint", exc_info=True)
 
     def _parse_switch_values(self, endpoint_info: ETAEndpoint):
         valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
@@ -284,12 +297,16 @@ class EtaAPI:
         self, float_dict, switches_dict, text_dict, writable_dict
     ):
         all_endpoints = await self._get_sensors_dict()
+        _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
         queried_endpoints = []
         for key in all_endpoints:
             try:
                 if all_endpoints[key] in queried_endpoints:
+                    _LOGGER.debug("Skipping duplicate endpoint %s", all_endpoints[key])
                     # ignore duplicate endpoints
                     continue
+
+                _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
 
                 queried_endpoints.append(all_endpoints[key])
 
@@ -312,20 +329,26 @@ class EtaAPI:
                     endpoint_info["value"] = value
 
                 if self._is_writable(endpoint_info):
+                    _LOGGER.debug("Adding as writable sensor")
                     # this is checked separately because all writable sensors are registered as both a sensor entity and a number entity
                     # add a suffix to the unique id to make sure it is still unique in case the sensor is selected in the writable list and in the sensor list
                     writable_dict[unique_key + "_writable"] = endpoint_info
 
                 if self._is_float_sensor(endpoint_info):
+                    _LOGGER.debug("Adding as float sensor")
                     float_dict[unique_key] = endpoint_info
                 elif self._is_switch(endpoint_info):
+                    _LOGGER.debug("Adding as switch")
                     self._parse_switch_values(endpoint_info)
                     switches_dict[unique_key] = endpoint_info
                 elif self._is_text_sensor(endpoint_info):
+                    _LOGGER.debug("Adding as text sensor")
                     text_dict[unique_key] = endpoint_info
+                else:
+                    _LOGGER.debug("Not adding endpoint: Unknown type")
 
-            except:
-                pass
+            except Exception:
+                _LOGGER.debug("Invalid endpoint", exc_info=True)
 
     def _is_writable(self, endpoint_info: ETAEndpoint):
         # TypedDict does not support isinstance(),
@@ -357,11 +380,13 @@ class EtaAPI:
         return True
 
     def _parse_varinfo(self, data):
+        _LOGGER.debug("Parsing varinfo %s", data)
         is_writable = data["@isWritable"]
         valid_values = None
         if (
             is_writable == "1"
             and "validValues" in data
+            and data["validValues"] is not None
             and "value" in data["validValues"]
         ):
             values = data["validValues"]["value"]
@@ -371,6 +396,7 @@ class EtaAPI:
         elif (
             is_writable == "1"
             and "validValues" in data
+            and data["validValues"] is not None
             and "min" in data["validValues"]
             and "#text" in data["validValues"]["min"]
             and data["@unit"] in self._writable_sensor_units
@@ -424,7 +450,8 @@ class EtaAPI:
             return True
 
         _LOGGER.error(
-            f"ETA Integration - could not set state of switch. Got invalid result: {text}"
+            "ETA Integration - could not set state of switch. Got invalid result: %s",
+            text,
         )
         return False
 
@@ -441,12 +468,14 @@ class EtaAPI:
             return True
         elif "error" in data:
             _LOGGER.error(
-                f"ETA Integration - could not set write value to endpoint. Terminal returned: {data['error']}"
+                "ETA Integration - could not set write value to endpoint. Terminal returned: %s",
+                data["error"],
             )
             return False
 
         _LOGGER.error(
-            f"ETA Integration - could not set write value to endpoint. Got invalid result: {text}"
+            "ETA Integration - could not set write value to endpoint. Got invalid result: %s",
+            text,
         )
         return False
 

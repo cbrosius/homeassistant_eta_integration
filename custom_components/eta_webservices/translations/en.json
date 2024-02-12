@@ -3,10 +3,11 @@
         "step": {
             "user": {
                 "title": "ETA Step 1",
-                "description": "Enter the host and port of your ETA terminal. If you need help with the configuration have a look here: https://github.com/Tidone/homeassistant_eta_integration \n\n Note: Depending on the total number of endpoints of your ETA terminal, getting all possible sensors can take a very long time! Have patience when you click on Submit.",
+                "description": "Enter the host and port of your ETA terminal. If you need help with the configuration have a look here: https://github.com/Tidone/homeassistant_eta_integration \n\n Note: Depending on the total number of endpoints of your ETA terminal, getting all possible sensors can take a very long time! Have patience when you click on Submit.\n\nSelect the old API mode if you have problems with the new ETA API.",
                 "data": {
                     "host": "Host",
-                    "port": "Port"
+                    "port": "Port",
+                    "force_legacy_mode": "Force old API mode"
                 }
             },
             "select_entities": {
@@ -23,7 +24,8 @@
         "error": {
             "unknown_host": "Could not connect to the ETA terminal: Wrong host or port",
             "no_eta_endpoint": "Could not find a valid ETA endpoint. Did you enable the webservices in meinETA?",
-            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version."
+            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version.",
+            "legacy_mode_selected": "Using old API mode. Some entities may not be detected, or may be detected in the wrong category."
         },
         "abort": {
             "single_instance_allowed": "Host already configured. Only a single instance is allowed."
