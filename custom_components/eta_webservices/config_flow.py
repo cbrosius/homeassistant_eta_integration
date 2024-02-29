@@ -23,6 +23,7 @@ from .const import (
     CHOSEN_TEXT_SENSORS,
     CHOSEN_WRITABLE_SENSORS,
     FORCE_LEGACY_MODE,
+    ENABLE_DEBUG_LOGGING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize."""
         self._errors = {}
         self.data = {}
+        self._old_logging_level = logging.NOTSET
 
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
@@ -61,6 +63,10 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     self._errors["base"] = "wrong_api_version"
                 elif user_input[FORCE_LEGACY_MODE]:
                     self._errors["base"] = "legacy_mode_selected"
+
+                if user_input[ENABLE_DEBUG_LOGGING]:
+                    self._old_logging_level = _LOGGER.parent.getEffectiveLevel()
+                    _LOGGER.parent.setLevel(logging.DEBUG)
 
                 self.data = user_input
 
@@ -101,6 +107,10 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 CHOSEN_WRITABLE_SENSORS, []
             )
 
+            # Restore old logging level
+            if self._old_logging_level != logging.NOTSET:
+                _LOGGER.parent.setLevel(self._old_logging_level)
+
             # User is done, create the config entry.
             return self.async_create_entry(
                 title=f"ETA at {self.data[CONF_HOST]}", data=self.data
@@ -122,6 +132,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_HOST, default=user_input[CONF_HOST]): str,
                     vol.Required(CONF_PORT, default=user_input[CONF_PORT]): str,
                     vol.Required(FORCE_LEGACY_MODE, default=False): cv.boolean,
+                    vol.Required(ENABLE_DEBUG_LOGGING, default=False): cv.boolean,
                 }
             ),
             errors=self._errors,

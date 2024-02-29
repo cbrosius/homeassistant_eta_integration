@@ -7,7 +7,8 @@
                 "data": {
                     "host": "Host",
                     "port": "Port",
-                    "force_legacy_mode": "Erzwinge die alte API Version"
+                    "force_legacy_mode": "Erzwinge die alte API Version",
+                    "enable_debug_logging": "Aktiviere ausführliche Protokolle"
                 }
             },
             "select_entities": {

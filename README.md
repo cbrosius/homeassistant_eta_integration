@@ -57,6 +57,13 @@ This integration can be configured directly in Home Assistant via HACS:
 
 -   Your ETA pellets unit needs a static IP address! Either configure the IP adress directly on the ETA terminal, or set the DHCP server on your router to give the ETA unit a static lease.
 
+## Logs
+
+If you have problems setting up this integration you can enable verbose logs on the dialog where you enter your ETA credentials.
+This will log all communication responses, which may help locating the problem.
+After setting up the integration you can download the logs at `Settings` -> `System` -> `Logs` -> `Download Full Log`.
+Please note that these logs may be very large, and contain sensitive information from other integrations. If you want to post them somewhere you may have to manually edit the file and delete the lines from before you started setting up this integration.
+
 ## Error Events
 
 This integration publishes an event whenever a new error is reported by the ETA terminal, or when an active error is cleared.

@@ -7,7 +7,8 @@
                 "data": {
                     "host": "Host",
                     "port": "Port",
-                    "force_legacy_mode": "Force old API mode"
+                    "force_legacy_mode": "Force old API mode",
+                    "enable_debug_logging": "Enable verbose logging"
                 }
             },
             "select_entities": {

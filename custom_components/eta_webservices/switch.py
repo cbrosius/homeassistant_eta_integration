@@ -56,8 +56,8 @@ class EtaSwitch(EtaEntity, SwitchEntity):
 
         self._attr_icon = "mdi:power"
 
-        self.on_value = endpoint_info["valid_values"]["on_value"]
-        self.off_value = endpoint_info["valid_values"]["off_value"]
+        self.on_value = endpoint_info["valid_values"].get("on_value", 1803)
+        self.off_value = endpoint_info["valid_values"].get("off_value", 1802)
         self._attr_is_on = False
         self._attr_should_poll = True
 
