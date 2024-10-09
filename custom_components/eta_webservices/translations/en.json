@@ -26,7 +26,8 @@
             "unknown_host": "Could not connect to the ETA terminal: Wrong host or port",
             "no_eta_endpoint": "Could not find a valid ETA endpoint. Did you enable the webservices in meinETA?",
             "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version.",
-            "legacy_mode_selected": "Using old API mode. Some entities may not be detected, or may be detected in the wrong category."
+            "legacy_mode_selected": "Using old API mode. Some entities may not be detected, or may be detected in the wrong category.",
+            "value_update_error": "At least one endpoint is reporting an error. The respective entities won't be shown in the list."
         },
         "abort": {
             "single_instance_allowed": "Host already configured. Only a single instance is allowed."
@@ -44,7 +45,8 @@
             }
         },
         "error": {
-            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version."
+            "wrong_api_version": "API version of ETA terminal is too low. Some entities may not be detected. Please consider updating the firmware of your ETA terminal to the latest version.",
+            "value_update_error": "At least one endpoint is reporting an error. The respective entities won't be shown in the list."
         }
     },
     "entity": {

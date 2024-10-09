@@ -26,7 +26,8 @@
             "unknown_host": "Konnte keine Verbindung zum ETA Gerät aufbauen: Falscher Host oder Port",
             "no_eta_endpoint": "Konnte keinen ETA Endpunkt finden. Hast du die Webservices in meinETA aktiviert?",
             "wrong_api_version": "API Version des ETA Geräts ist zu alt. Einige Entitäten werden möglicherweise nicht oder falsch erkannt. Aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware, falls möglich.",
-            "legacy_mode_selected": "Alter API Modus wird verwendet. Einige Entitäten werden möglicherweise nicht oder falsch erkannt."
+            "legacy_mode_selected": "Alter API Modus wird verwendet. Einige Entitäten werden möglicherweise nicht oder falsch erkannt.",
+            "value_update_error": "Mindestens ein Endpunkt meldet einen Fehler. Die entsprechenden Entitäten werden in der Liste nicht angezeigt."
         },
         "abort": {
             "single_instance_allowed": "Host bereits konfiguriert. Nur eine Instanz ist erlaubt."
@@ -44,7 +45,8 @@
             }
         },
         "error": {
-            "wrong_api_version": "API Version des ETA Geräts ist zu alt. Einige Entitäten werden möglicherweise nicht oder falsch erkannt. Aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware, falls möglich."
+            "wrong_api_version": "API Version des ETA Geräts ist zu alt. Einige Entitäten werden möglicherweise nicht oder falsch erkannt. Aktualisiere die Firmware deines ETA Geräts auf die aktuellste Firmware, falls möglich.",
+            "value_update_error": "Mindestens ein Endpunkt meldet einen Fehler. Die entsprechenden Entitäten werden in der Liste nicht angezeigt."
         }
     },
     "entity": {

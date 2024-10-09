@@ -1,4 +1,6 @@
 """Adds config flow for Blueprint."""
+
+import copy
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
@@ -358,10 +360,11 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         current_chosen_writable_sensors,
     ):
         """Show the configuration form to select which endpoints should become entities."""
-        sensors_dict: dict[str, ETAEndpoint] = self.data[FLOAT_DICT]
-        switches_dict: dict[str, ETAEndpoint] = self.data[SWITCHES_DICT]
-        text_dict: dict[str, ETAEndpoint] = self.data[TEXT_DICT]
-        writable_dict: dict[str, ETAEndpoint] = self.data[WRITABLE_DICT]
+        # Create shallow copies of the dicts to make sure the del operators below won't delete the original data
+        sensors_dict: dict[str, ETAEndpoint] = copy.copy(self.data[FLOAT_DICT])
+        switches_dict: dict[str, ETAEndpoint] = copy.copy(self.data[SWITCHES_DICT])
+        text_dict: dict[str, ETAEndpoint] = copy.copy(self.data[TEXT_DICT])
+        writable_dict: dict[str, ETAEndpoint] = copy.copy(self.data[WRITABLE_DICT])
 
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
@@ -371,22 +374,59 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             self._errors["base"] = "wrong_api_version"
 
         # Update current values
-        for entity in sensors_dict:
-            sensors_dict[entity]["value"], _ = await eta_client.get_data(
-                sensors_dict[entity]["url"]
-            )
-        for entity in switches_dict:
-            switches_dict[entity]["value"], _ = await eta_client.get_data(
-                switches_dict[entity]["url"]
-            )
-        for entity in text_dict:
-            text_dict[entity]["value"], _ = await eta_client.get_data(
-                text_dict[entity]["url"]
-            )
-        for entity in writable_dict:
-            writable_dict[entity]["value"], _ = await eta_client.get_data(
-                writable_dict[entity]["url"]
-            )
+        for entity in list(sensors_dict.keys()):
+            try:
+                sensors_dict[entity]["value"], _ = await eta_client.get_data(
+                    sensors_dict[entity]["url"]
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
+                    sensors_dict[entity]["friendly_name"],
+                    sensors_dict[entity]["url"],
+                )
+                del sensors_dict[entity]
+                self._errors["base"] = "value_update_error"
+
+        for entity in list(switches_dict.keys()):
+            try:
+                switches_dict[entity]["value"], _ = await eta_client.get_data(
+                    switches_dict[entity]["url"]
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
+                    switches_dict[entity]["friendly_name"],
+                    switches_dict[entity]["url"],
+                )
+                del switches_dict[entity]
+                self._errors["base"] = "value_update_error"
+        for entity in list(text_dict.keys()):
+            try:
+                text_dict[entity]["value"], _ = await eta_client.get_data(
+                    text_dict[entity]["url"]
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
+                    text_dict[entity]["friendly_name"],
+                    text_dict[entity]["url"],
+                )
+                del text_dict[entity]
+                self._errors["base"] = "value_update_error"
+        for entity in list(writable_dict.keys()):
+            try:
+                writable_dict[entity]["value"], _ = await eta_client.get_data(
+                    writable_dict[entity]["url"]
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
+                    writable_dict[entity]["friendly_name"],
+                    writable_dict[entity]["url"],
+                )
+                del writable_dict[entity]
+                self._errors["base"] = "value_update_error"
 
         return self.async_show_form(
             step_id="user",
