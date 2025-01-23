@@ -1,9 +1,12 @@
 from datetime import datetime
-from typing import TypedDict
-from packaging import version
-from aiohttp import ClientSession
-import xmltodict
 import logging
+from typing import TypedDict
+
+from aiohttp import ClientSession
+from packaging import version
+import xmltodict
+
+from .const import CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,9 +68,15 @@ class EtaAPI:
             "m²",
             "s",
             "°C",
+            CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
         ]
 
-        self._writable_sensor_units = ["%", "°C", "kg"]
+        self._writable_sensor_units = [
+            "%",
+            "°C",
+            "kg",
+            CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
+        ]
         self._default_valid_writable_values = {
             "%": ETAValidWritableValues(
                 scaled_min_value=-100,
@@ -129,10 +138,10 @@ class EtaAPI:
 
         return eta_version >= required_version
 
-    def _parse_data(self, data):
+    def _parse_data(self, data, force_number_handling=False):
         _LOGGER.debug("Parsing data %s", data)
         unit = data["@unit"]
-        if unit in self._float_sensor_units:
+        if unit in self._float_sensor_units or force_number_handling:
             scale_factor = int(data["@scaleFactor"])
             decimal_places = int(data["@decPlaces"])
             raw_value = float(data["#text"])
@@ -143,11 +152,11 @@ class EtaAPI:
             value = data["@strValue"]
         return value, unit
 
-    async def get_data(self, uri):
+    async def get_data(self, uri, force_number_handling=False):
         data = await self._get_request("/user/var/" + str(uri))
         text = await data.text()
         data = xmltodict.parse(text)["eta"]["value"]
-        return self._parse_data(data)
+        return self._parse_data(data, force_number_handling)
 
     async def _get_data_plus_raw(self, uri):
         data = await self._get_request("/user/var/" + str(uri))
@@ -379,10 +388,31 @@ class EtaAPI:
             return False
         return True
 
+    def _parse_unit(self, data):
+        unit = data["@unit"]
+        if unit == "":
+            if (
+                data["validValues"] is not None
+                and "min" in data["validValues"]
+                and "max" in data["validValues"]
+                and "#text" in data["validValues"]["min"]
+                and int(data["@scaleFactor"]) == 1
+                and int(data["@decPlaces"]) == 0
+            ):
+                _LOGGER.debug("Found time endpoint")
+                min_value = int(data["validValues"]["min"]["#text"])
+                max_value = int(data["validValues"]["max"]["#text"])
+                if min_value == 0 and max_value == 24 * 60 - 1:
+                    # time endpoints have a min value of 0 and max value of 1439
+                    # it may be better to parse the strValue and check if it is in the format "00:00"
+                    unit = CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
+        return unit
+
     def _parse_varinfo(self, data):
         _LOGGER.debug("Parsing varinfo %s", data)
         is_writable = data["@isWritable"]
         valid_values = None
+        unit = self._parse_unit(data)
         if (
             is_writable == "1"
             and "validValues" in data
@@ -399,7 +429,7 @@ class EtaAPI:
             and data["validValues"] is not None
             and "min" in data["validValues"]
             and "#text" in data["validValues"]["min"]
-            and data["@unit"] in self._writable_sensor_units
+            and unit in self._writable_sensor_units
         ):
             min_value = data["validValues"]["min"]["#text"]
             max_value = data["validValues"]["max"]["#text"]
@@ -418,7 +448,7 @@ class EtaAPI:
         return ETAEndpoint(
             valid_values=valid_values,
             friendly_name=data["@fullName"],
-            unit=data["@unit"],
+            unit=unit,
             endpoint_type=data["type"],
         )
 

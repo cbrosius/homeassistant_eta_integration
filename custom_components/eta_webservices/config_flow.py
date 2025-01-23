@@ -25,7 +25,9 @@ from .const import (
     CHOSEN_TEXT_SENSORS,
     CHOSEN_WRITABLE_SENSORS,
     FORCE_LEGACY_MODE,
+    FORCE_SENSOR_DETECTION,
     ENABLE_DEBUG_LOGGING,
+    INVISIBLE_UNITS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,7 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Eta."""
 
-    VERSION = 3
+    VERSION = 4
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     def __init__(self) -> None:
@@ -156,9 +158,9 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             options=[
                                 selector.SelectOptionDict(
                                     value=key,
-                                    label=f"{sensors_dict[key]['friendly_name']} ({sensors_dict[key]['value']} {sensors_dict[key]['unit']})",
+                                    label=f"{sensors_dict[key]['friendly_name']} ({sensors_dict[key]['value']} {sensors_dict[key]['unit'] if sensors_dict[key]['unit'] not in INVISIBLE_UNITS else ""})",
                                 )
-                                for key in sensors_dict.keys()
+                                for key in sensors_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -171,7 +173,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                                     value=key,
                                     label=f"{switches_dict[key]['friendly_name']} ({switches_dict[key]['value']})",
                                 )
-                                for key in switches_dict.keys()
+                                for key in switches_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -184,7 +186,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                                     value=key,
                                     label=f"{text_dict[key]['friendly_name']} ({text_dict[key]['value']})",
                                 )
-                                for key in text_dict.keys()
+                                for key in text_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -195,9 +197,9 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             options=[
                                 selector.SelectOptionDict(
                                     value=key,
-                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit']})",
+                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit'] if writable_dict[key]['unit'] not in INVISIBLE_UNITS else ""})",
                                 )
-                                for key in writable_dict.keys()
+                                for key in writable_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -278,6 +280,34 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             _, _, _, self.data[WRITABLE_DICT] = await self._get_possible_endpoints(
                 self.data[CONF_HOST], self.data[CONF_PORT], self.data[FORCE_LEGACY_MODE]
             )
+
+        if self.data.get(FORCE_SENSOR_DETECTION, False):
+            self.data[FORCE_SENSOR_DETECTION] = False
+            (
+                new_float_sensors,
+                new_switches,
+                new_text_sensors,
+                new_writable_sensors,
+            ) = await self._get_possible_endpoints(
+                self.data[CONF_HOST], self.data[CONF_PORT], self.data[FORCE_LEGACY_MODE]
+            )
+            # Add newly detected sensors without changing the old ones
+            for key in new_float_sensors:
+                if key not in self.data[FLOAT_DICT]:
+                    self.data[FLOAT_DICT][key] = new_float_sensors[key]
+
+            for key in new_switches:
+                if key not in self.data[SWITCHES_DICT]:
+                    self.data[SWITCHES_DICT][key] = new_switches[key]
+
+            for key in new_text_sensors:
+                if key not in self.data[TEXT_DICT]:
+                    self.data[TEXT_DICT][key] = new_text_sensors[key]
+
+            for key in new_writable_sensors:
+                if key not in self.data[WRITABLE_DICT]:
+                    self.data[WRITABLE_DICT][key] = new_writable_sensors[key]
+
         return await self.async_step_user()
 
     async def async_step_user(self, user_input=None):
@@ -303,27 +333,27 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             removed_entities = [
                 entity_map_sensors[entity_id]
-                for entity_id in entity_map_sensors.keys()
+                for entity_id in entity_map_sensors
                 if entity_id not in user_input[CHOSEN_FLOAT_SENSORS]
             ]
             removed_entities.extend(
                 [
                     entity_map_switches[entity_id]
-                    for entity_id in entity_map_switches.keys()
+                    for entity_id in entity_map_switches
                     if entity_id not in user_input[CHOSEN_SWITCHES]
                 ]
             )
             removed_entities.extend(
                 [
                     entity_map_text_sensors[entity_id]
-                    for entity_id in entity_map_text_sensors.keys()
+                    for entity_id in entity_map_text_sensors
                     if entity_id not in user_input[CHOSEN_TEXT_SENSORS]
                 ]
             )
             removed_entities.extend(
                 [
                     entity_map_writable_sensors[entity_id]
-                    for entity_id in entity_map_writable_sensors.keys()
+                    for entity_id in entity_map_writable_sensors
                     if entity_id not in user_input[CHOSEN_WRITABLE_SENSORS]
                 ]
             )
@@ -346,10 +376,10 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
             return self.async_create_entry(title="", data=data)
         return await self._show_config_form_endpoint(
-            [key for key in entity_map_sensors.keys()],
-            [key for key in entity_map_switches.keys()],
-            [key for key in entity_map_text_sensors.keys()],
-            [key for key in entity_map_writable_sensors.keys()],
+            list(entity_map_sensors.keys()),
+            list(entity_map_switches.keys()),
+            list(entity_map_text_sensors.keys()),
+            list(entity_map_writable_sensors.keys()),
         )
 
     async def _show_config_form_endpoint(
@@ -439,9 +469,9 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                             options=[
                                 selector.SelectOptionDict(
                                     value=key,
-                                    label=f"{sensors_dict[key]['friendly_name']} ({sensors_dict[key]['value']} {sensors_dict[key]['unit']})",
+                                    label=f"{sensors_dict[key]['friendly_name']} ({sensors_dict[key]['value']} {sensors_dict[key]['unit'] if sensors_dict[key]['unit'] not in INVISIBLE_UNITS else ""})",
                                 )
-                                for key in sensors_dict.keys()
+                                for key in sensors_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -456,7 +486,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                                     value=key,
                                     label=f"{switches_dict[key]['friendly_name']} ({switches_dict[key]['value']})",
                                 )
-                                for key in switches_dict.keys()
+                                for key in switches_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -471,7 +501,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                                     value=key,
                                     label=f"{text_dict[key]['friendly_name']} ({text_dict[key]['value']})",
                                 )
-                                for key in text_dict.keys()
+                                for key in text_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -484,9 +514,9 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                             options=[
                                 selector.SelectOptionDict(
                                     value=key,
-                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit']})",
+                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit'] if writable_dict[key]['unit'] not in INVISIBLE_UNITS else ""})",
                                 )
-                                for key in writable_dict.keys()
+                                for key in writable_dict
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,

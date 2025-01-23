@@ -20,6 +20,7 @@ This is a fork of [nigl's repo](https://github.com/nigl/homeassistant_eta_integr
 -   Implemented error events ([details](#error-events))
 -   Implemented a custom service to set the value of an endpoint ([details](#set-value-service))
 -   Implemented writable sensors ([details](#writable-sensors))
+-   Implemented time sensors (only for API v1.2 or higher)
 
 ## Screenshots
 

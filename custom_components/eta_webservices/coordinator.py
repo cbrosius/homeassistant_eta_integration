@@ -1,4 +1,5 @@
 """The Airzone integration."""
+
 from __future__ import annotations
 
 from asyncio import timeout
@@ -10,7 +11,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, WRITABLE_DICT, CHOSEN_WRITABLE_SENSORS
+from .const import (
+    DOMAIN,
+    WRITABLE_DICT,
+    CHOSEN_WRITABLE_SENSORS,
+    CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
+)
 from .api import EtaAPI, ETAError, ETAEndpoint
 
 DATA_SCAN_INTERVAL = timedelta(minutes=1)
@@ -84,6 +90,9 @@ class ETAWritableUpdateCoordinator(DataUpdateCoordinator[dict]):
             update_interval=DATA_SCAN_INTERVAL,
         )
 
+    def _should_force_number_handling(self, unit):
+        return unit == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
+
     async def _async_update_data(self) -> dict:
         """Update data via library."""
         data = {}
@@ -92,7 +101,12 @@ class ETAWritableUpdateCoordinator(DataUpdateCoordinator[dict]):
         for sensor in self.chosen_writable_sensors:
             async with timeout(10):
                 value, _ = await eta_client.get_data(
-                    self.all_writable_sensors[sensor]["url"]
+                    self.all_writable_sensors[sensor]["url"],
+                    # force the api to return the number value instead of the text value, even if the eta endpoint returns an invalid unit
+                    # This is the case for e.g. time endpoints, which have an empty unit, but we still need the number value (minutes since midnight), instead of the text value ("19:00")
+                    self._should_force_number_handling(
+                        self.all_writable_sensors[sensor]["unit"]
+                    ),
                 )
                 data[sensor] = value
                 data[sensor.removesuffix("_writable")] = value

@@ -5,14 +5,20 @@ from homeassistant.const import Platform
 from .const import DOMAIN, ERROR_UPDATE_COORDINATOR, WRITABLE_UPDATE_COORDINATOR
 from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
 from .services import async_setup_services
-from .const import WRITABLE_DICT, CHOSEN_WRITABLE_SENSORS, FORCE_LEGACY_MODE
+from .const import (
+    WRITABLE_DICT,
+    CHOSEN_WRITABLE_SENSORS,
+    FORCE_LEGACY_MODE,
+    FORCE_SENSOR_DETECTION,
+)
 
 PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
-    Platform.SWITCH,
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.TIME,
 ]
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,16 +66,21 @@ async def async_migrate_entry(
         new_data[WRITABLE_DICT] = []
         new_data[CHOSEN_WRITABLE_SENSORS] = []
         new_data[FORCE_LEGACY_MODE] = False
-        config_entry.version = 3
+        new_data[FORCE_SENSOR_DETECTION] = True
 
-        hass.config_entries.async_update_entry(config_entry, data=new_data)
+        hass.config_entries.async_update_entry(config_entry, data=new_data, version=4)
     elif config_entry.version == 2:
         new_data = config_entry.data.copy()
 
         new_data[FORCE_LEGACY_MODE] = False
-        config_entry.version = 3
+        new_data[FORCE_SENSOR_DETECTION] = True
 
-        hass.config_entries.async_update_entry(config_entry, data=new_data)
+        hass.config_entries.async_update_entry(config_entry, data=new_data, version=4)
+    elif config_entry.version == 3:
+        new_data = config_entry.data.copy()
+
+        new_data[FORCE_SENSOR_DETECTION] = True
+        hass.config_entries.async_update_entry(config_entry, data=new_data, version=4)
 
     _LOGGER.info("Migration to version %s successful", config_entry.version)
     return True

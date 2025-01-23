@@ -32,6 +32,7 @@ from .const import (
     CHOSEN_WRITABLE_SENSORS,
     WRITABLE_DICT,
     WRITABLE_UPDATE_COORDINATOR,
+    INVISIBLE_UNITS,
 )
 
 SCAN_INTERVAL = timedelta(minutes=1)
@@ -53,6 +54,8 @@ async def async_setup_entry(
             config, hass, entity, config[WRITABLE_DICT][entity], coordinator
         )
         for entity in chosen_writable_sensors
+        if config[WRITABLE_DICT][entity]["unit"]
+        not in INVISIBLE_UNITS  # exclude all endpoints with a custom unit (e.g. time endpoints)
     ]
     async_add_entities(sensors, update_before_add=True)
 
