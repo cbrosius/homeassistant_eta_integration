@@ -296,9 +296,9 @@ class EtaAPI:
     def _parse_switch_values(self, endpoint_info: ETAEndpoint):
         valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
         for key in endpoint_info["valid_values"]:
-            if key in ("Ein", "On"):
+            if key in ("Ein", "On", "Ja", "Yes"):
                 valid_values["on_value"] = endpoint_info["valid_values"][key]
-            elif key in ("Aus", "Off"):
+            elif key in ("Aus", "Off", "Nein", "No"):
                 valid_values["off_value"] = endpoint_info["valid_values"][key]
         endpoint_info["valid_values"] = valid_values
 
@@ -384,7 +384,10 @@ class EtaAPI:
             return False
         if len(valid_values) != 2:
             return False
-        if not all(k in ("Ein", "Aus", "On", "Off") for k in valid_values):
+        if not all(
+            k in ("Ein", "Aus", "On", "Off", "Ja", "Nein", "Yes", "No")
+            for k in valid_values
+        ):
             return False
         return True
 
