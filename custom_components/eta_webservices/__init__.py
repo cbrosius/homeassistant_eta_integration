@@ -68,19 +68,19 @@ async def async_migrate_entry(
         new_data[FORCE_LEGACY_MODE] = False
         new_data[FORCE_SENSOR_DETECTION] = True
 
-        hass.config_entries.async_update_entry(config_entry, data=new_data, version=4)
+        hass.config_entries.async_update_entry(config_entry, data=new_data, version=5)
     elif config_entry.version == 2:
         new_data = config_entry.data.copy()
 
         new_data[FORCE_LEGACY_MODE] = False
         new_data[FORCE_SENSOR_DETECTION] = True
 
-        hass.config_entries.async_update_entry(config_entry, data=new_data, version=4)
-    elif config_entry.version == 3:
+        hass.config_entries.async_update_entry(config_entry, data=new_data, version=5)
+    elif config_entry.version in (3, 4):
         new_data = config_entry.data.copy()
 
         new_data[FORCE_SENSOR_DETECTION] = True
-        hass.config_entries.async_update_entry(config_entry, data=new_data, version=4)
+        hass.config_entries.async_update_entry(config_entry, data=new_data, version=5)
 
     _LOGGER.info("Migration to version %s successful", config_entry.version)
     return True

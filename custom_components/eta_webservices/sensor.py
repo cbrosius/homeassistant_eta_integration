@@ -104,7 +104,7 @@ async def async_setup_entry(
     async_add_entities(sensors, update_before_add=True)
 
 
-def determine_device_class(unit):
+def _determine_device_class(unit):
     unit_dict_eta = {
         "°C": SensorDeviceClass.TEMPERATURE,
         "W": SensorDeviceClass.POWER,
@@ -119,12 +119,21 @@ def determine_device_class(unit):
         "kg": SensorDeviceClass.WEIGHT,
         "mV": SensorDeviceClass.VOLTAGE,
         "s": SensorDeviceClass.DURATION,
+        "%rH": SensorDeviceClass.HUMIDITY,
     }
 
     if unit in unit_dict_eta:
         return unit_dict_eta[unit]
 
     return None
+
+
+def _get_native_unit(unit):
+    if unit == "%rH":
+        return "%"
+    if unit == "":
+        return None
+    return unit
 
 
 class EtaFloatSensor(EtaSensorEntity[float]):
@@ -147,11 +156,9 @@ class EtaFloatSensor(EtaSensorEntity[float]):
 
         super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
 
-        self._attr_device_class = determine_device_class(endpoint_info["unit"])
+        self._attr_device_class = _determine_device_class(endpoint_info["unit"])
 
-        self._attr_native_unit_of_measurement = endpoint_info["unit"]
-        if self._attr_native_unit_of_measurement == "":
-            self._attr_native_unit_of_measurement = None
+        self._attr_native_unit_of_measurement = _get_native_unit(endpoint_info["unit"])
 
         if self._attr_device_class == SensorDeviceClass.ENERGY:
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -184,11 +191,9 @@ class EtaFloatWritableSensor(SensorEntity, EtaWritableSensorEntity):
             coordinator, config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT
         )
 
-        self._attr_device_class = determine_device_class(endpoint_info["unit"])
+        self._attr_device_class = _determine_device_class(endpoint_info["unit"])
 
-        self._attr_native_unit_of_measurement = endpoint_info["unit"]
-        if self._attr_native_unit_of_measurement == "":
-            self._attr_native_unit_of_measurement = None
+        self._attr_native_unit_of_measurement = _get_native_unit(endpoint_info["unit"])
 
         if self._attr_device_class == SensorDeviceClass.ENERGY:
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING

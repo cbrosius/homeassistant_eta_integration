@@ -68,6 +68,7 @@ class EtaAPI:
             "m²",
             "s",
             "°C",
+            "%rH",
             CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
         ]
 
@@ -395,7 +396,8 @@ class EtaAPI:
         unit = data["@unit"]
         if unit == "":
             if (
-                data["validValues"] is not None
+                "validValues" in data
+                and data["validValues"] is not None
                 and "min" in data["validValues"]
                 and "max" in data["validValues"]
                 and "#text" in data["validValues"]["min"]
@@ -413,12 +415,10 @@ class EtaAPI:
 
     def _parse_varinfo(self, data):
         _LOGGER.debug("Parsing varinfo %s", data)
-        is_writable = data["@isWritable"]
         valid_values = None
         unit = self._parse_unit(data)
         if (
-            is_writable == "1"
-            and "validValues" in data
+            "validValues" in data
             and data["validValues"] is not None
             and "value" in data["validValues"]
         ):
@@ -427,8 +427,7 @@ class EtaAPI:
                 zip([k["@strValue"] for k in values], [int(v["#text"]) for v in values])
             )
         elif (
-            is_writable == "1"
-            and "validValues" in data
+            "validValues" in data
             and data["validValues"] is not None
             and "min" in data["validValues"]
             and "#text" in data["validValues"]["min"]

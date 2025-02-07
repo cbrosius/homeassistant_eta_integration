@@ -36,7 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Eta."""
 
-    VERSION = 4
+    VERSION = 5
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     def __init__(self) -> None:
@@ -282,6 +282,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             )
 
         if self.data.get(FORCE_SENSOR_DETECTION, False):
+            _LOGGER.info("Forcing new endpoint discovery")
             self.data[FORCE_SENSOR_DETECTION] = False
             (
                 new_float_sensors,
@@ -291,22 +292,29 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             ) = await self._get_possible_endpoints(
                 self.data[CONF_HOST], self.data[CONF_PORT], self.data[FORCE_LEGACY_MODE]
             )
+            added_sensor_count = 0
             # Add newly detected sensors without changing the old ones
             for key in new_float_sensors:
                 if key not in self.data[FLOAT_DICT]:
+                    added_sensor_count += 1
                     self.data[FLOAT_DICT][key] = new_float_sensors[key]
 
             for key in new_switches:
                 if key not in self.data[SWITCHES_DICT]:
+                    added_sensor_count += 1
                     self.data[SWITCHES_DICT][key] = new_switches[key]
 
             for key in new_text_sensors:
                 if key not in self.data[TEXT_DICT]:
+                    added_sensor_count += 1
                     self.data[TEXT_DICT][key] = new_text_sensors[key]
 
             for key in new_writable_sensors:
                 if key not in self.data[WRITABLE_DICT]:
+                    added_sensor_count += 1
                     self.data[WRITABLE_DICT][key] = new_writable_sensors[key]
+
+            _LOGGER.info("Added %i new sensors", added_sensor_count)
 
         return await self.async_step_user()
 
