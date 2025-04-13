@@ -424,7 +424,11 @@ class EtaAPI:
         ):
             values = data["validValues"]["value"]
             valid_values = dict(
-                zip([k["@strValue"] for k in values], [int(v["#text"]) for v in values])
+                zip(
+                    [k["@strValue"] for k in values],
+                    [int(v["#text"]) for v in values],
+                    strict=False,
+                )
             )
         elif (
             "validValues" in data
@@ -498,7 +502,7 @@ class EtaAPI:
         data = xmltodict.parse(text)["eta"]
         if "success" in data:
             return True
-        elif "error" in data:
+        if "error" in data:
             _LOGGER.error(
                 "ETA Integration - could not set write value to endpoint. Terminal returned: %s",
                 data["error"],
@@ -525,18 +529,20 @@ class EtaAPI:
                 fub_errors = [
                     fub_errors,
                 ]
-            for error in fub_errors:
-                errors.append(
-                    ETAError(
-                        msg=error["@msg"],
-                        priority=error["@priority"],
-                        time=datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S"),
-                        text=error["#text"],
-                        fub=fub_name,
-                        host=self._host,
-                        port=self._port,
-                    )
+            errors = [
+                ETAError(
+                    msg=error["@msg"],
+                    priority=error["@priority"],
+                    time=datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S")
+                    if error.get("@time", "") != ""
+                    else datetime.now,
+                    text=error["#text"],
+                    fub=fub_name,
+                    host=self._host,
+                    port=self._port,
                 )
+                for error in fub_errors
+            ]
 
         return errors
 
