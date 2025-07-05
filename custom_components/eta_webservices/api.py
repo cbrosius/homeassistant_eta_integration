@@ -370,11 +370,7 @@ class EtaAPI:
         )
 
     def _is_text_sensor(self, endpoint_info: ETAEndpoint):
-        return (
-            endpoint_info["unit"] == ""
-            and endpoint_info["valid_values"] is None
-            and endpoint_info["endpoint_type"] == "TEXT"
-        )
+        return endpoint_info["unit"] == "" and endpoint_info["endpoint_type"] == "TEXT"
 
     def _is_float_sensor(self, endpoint_info: ETAEndpoint):
         return endpoint_info["unit"] in self._float_sensor_units
