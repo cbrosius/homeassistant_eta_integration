@@ -40,6 +40,7 @@ from .const import (
     ERROR_UPDATE_COORDINATOR,
     WRITABLE_UPDATE_COORDINATOR,
 )
+from .utils import create_device_info
 
 SCAN_INTERVAL = timedelta(minutes=1)
 
@@ -155,6 +156,20 @@ class EtaFloatSensor(EtaSensorEntity[float]):
         _LOGGER.info("ETA Integration - init float sensor")
 
         super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
+
+        # Extract the device name from the unique_id
+        parts = unique_id.split("_")
+        if len(parts) >= 3:
+            device_name = parts[2]
+        else:
+            device_name = (
+                "Unknown"  # Handle cases where the unique_id format is unexpected
+            )
+            _LOGGER.warning(
+                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
+                unique_id,
+            )
+        self._attr_device_info = create_device_info(self.host, self.port, device_name)
 
         self._attr_device_class = _determine_device_class(endpoint_info["unit"])
 

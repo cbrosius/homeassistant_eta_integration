@@ -58,7 +58,17 @@ class EtaSwitch(EtaEntity, SwitchEntity):
         To show all values: http://192.168.178.75:8080/user/menu
         """
         _LOGGER.info("ETA Integration - init switch")
-
+        # Extract the device name from the unique_id
+        parts = unique_id.split("_")
+        if len(parts) >= 3:
+            device_name = parts[2]
+        else:
+            device_name = "Unknown"
+            _LOGGER.warning(
+                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
+                unique_id,
+            )
+        self._attr_device_info = create_device_info(self.host, self.port, device_name)
         super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
 
         self._attr_icon = "mdi:power"

@@ -80,8 +80,12 @@ class ETAWritableUpdateCoordinator(DataUpdateCoordinator[dict]):
         self.host = config.get(CONF_HOST)
         self.port = config.get(CONF_PORT)
         self.session = async_get_clientsession(hass)
-        self.chosen_writable_sensors: list[str] = config[CHOSEN_WRITABLE_SENSORS]
-        self.all_writable_sensors: dict[str, ETAEndpoint] = config[WRITABLE_DICT]
+        self.chosen_writable_sensors: list[str] = config.get(
+            CHOSEN_WRITABLE_SENSORS, []
+        )
+        self.all_writable_sensors: dict[str, ETAEndpoint] = config.get(
+            WRITABLE_DICT, {}
+        )
 
         super().__init__(
             hass,

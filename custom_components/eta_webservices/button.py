@@ -62,7 +62,18 @@ class EtaResendErrorEventsButton(ButtonEntity):
         self.entity_id = generate_entity_id(
             ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
         )
-        self._attr_device_info = create_device_info(host, port)
+
+        # Extract device name from unique_id
+        parts = self._attr_unique_id.split("_")
+        if len(parts) >= 3:
+            device_name = parts[2]
+        else:
+            device_name = "Unknown"
+            _LOGGER.warning(
+                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
+                self._attr_unique_id,
+            )
+        self._attr_device_info = create_device_info(host, port, device_name)
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     async def async_press(self) -> None:
@@ -94,7 +105,9 @@ class EtaDeviceConfigButton(ButtonEntity):
         self.entity_id = generate_entity_id(
             ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
         )
-        self._attr_device_info = create_device_info(host, port)
+        self._attr_device_info = create_device_info(
+            host, port, self.device_name
+        )  # Use provided device_name
         self._attr_name = f"Configure {device_name}"
 
     async def async_press(self) -> None:

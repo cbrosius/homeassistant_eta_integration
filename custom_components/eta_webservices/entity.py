@@ -29,7 +29,18 @@ class EtaEntity(Entity):
         self.port = config.get(CONF_PORT)
         self.uri = endpoint_info["url"]
 
-        self._attr_device_info = create_device_info(self.host, self.port)
+        # Extract device name from unique_id
+        parts = unique_id.split("_")
+        if len(parts) >= 3:
+            device_name = parts[2]
+        else:
+            device_name = "Unknown"
+            _LOGGER.warning(
+                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
+                unique_id,
+            )
+
+        self._attr_device_info = create_device_info(self.host, self.port, device_name)
         self.entity_id = generate_entity_id(entity_id_format, unique_id, hass=hass)
         self._attr_unique_id = unique_id
 
@@ -98,7 +109,16 @@ class EtaErrorEntity(CoordinatorEntity[ETAErrorUpdateCoordinator]):
             entity_id_format, self._attr_unique_id, hass=hass
         )
 
-        self._attr_device_info = create_device_info(host, port)
+        # Extract device name from unique_id
+        parts = self._attr_unique_id.split("_")
+        device_name = parts[2] if len(parts) >= 3 else "Unknown"
+        if device_name == "Unknown":
+            _LOGGER.warning(
+                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
+                self._attr_unique_id,
+            )
+
+        self._attr_device_info = create_device_info(host, port, device_name)
 
     @abstractmethod
     def handle_data_updates(self, data) -> None:

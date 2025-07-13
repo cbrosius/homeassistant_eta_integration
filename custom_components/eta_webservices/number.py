@@ -107,6 +107,17 @@ class EtaWritableNumberSensor(NumberEntity, EtaWritableSensorEntity):
         )  # calculate the step size based on the number of decimal places
 
     def handle_data_updates(self, data: float) -> None:
+        # Extract the device name from the unique_id
+        parts = self._attr_unique_id.split("_")
+        if len(parts) >= 3:
+            device_name = parts[2]
+        else:
+            device_name = "Unknown"
+            _LOGGER.warning(
+                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
+                self._attr_unique_id,
+            )
+        self._attr_device_info = create_device_info(self.host, self.port, device_name)
         self._attr_native_value = data
 
     async def async_set_native_value(self, value: float) -> None:

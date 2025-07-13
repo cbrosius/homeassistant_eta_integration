@@ -98,21 +98,28 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_devices(self, user_input: dict = None):
         """Second step in config flow to select devices."""
         if user_input is not None:
-            self.data["chosen_devices"] = user_input.get("chosen_devices", [])
+            chosen_devices = user_input.get("chosen_devices", [])
+            self.data["chosen_devices"] = chosen_devices
 
-            (
-                self.data[FLOAT_DICT],
-                self.data[SWITCHES_DICT],
-                self.data[TEXT_DICT],
-                self.data[WRITABLE_DICT],
-            ) = await self._get_possible_endpoints(
-                self.data[CONF_HOST],
-                self.data[CONF_PORT],  #
-                self.data[FORCE_LEGACY_MODE],
-                self.data["chosen_devices"],
-            )
-
-            return await self.async_step_select_entities()
+            if chosen_devices:
+                (
+                    self.data[FLOAT_DICT],
+                    self.data[SWITCHES_DICT],
+                    self.data[TEXT_DICT],
+                    self.data[WRITABLE_DICT],
+                ) = await self._get_possible_endpoints(
+                    self.data[CONF_HOST],
+                    self.data[CONF_PORT],
+                    self.data[FORCE_LEGACY_MODE],
+                    chosen_devices,
+                )
+                return await self.async_step_select_entities()
+            else:
+                # Create a config entry without scanning for entities
+                return self.async_create_entry(
+                    title=f"ETA at {self.data[CONF_HOST]}",
+                    data={**self.data, "no_devices_selected": True},
+                )
 
         return self.async_show_form(
             step_id="select_devices",
@@ -352,25 +359,38 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        # Remove: self.config_entry = config_entry
+        self.config_entry = config_entry
         self.data = {}
         self._errors = {}
 
-    async def _get_possible_endpoints(self, host, port, force_legacy_mode):
+    async def _get_possible_endpoints(
+        self, host, port, force_legacy_mode, chosen_devices: list[str] = None
+    ):
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, host, port)
         float_dict = {}
         switches_dict = {}
         text_dict = {}
         writable_dict = {}
-        await eta_client.get_all_sensors(
-            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict
+        await eta_client.get_all_sensors(  # Pass chosen_devices
+            force_legacy_mode,
+            float_dict,
+            switches_dict,
+            text_dict,
+            writable_dict,
+            chosen_devices,
         )
 
         return float_dict, switches_dict, text_dict, writable_dict
 
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
-        self.data = self.hass.data[DOMAIN][self.config_entry.entry_id]
+        """Manage the options."""
+        self.data = self.hass.data[DOMAIN][self.config_entry.entry_id].copy()
+        if self.data.get("no_devices_selected", False):
+            # if no devices were selected during config, allow device selection now
+            return await self.async_step_devices()
+        else:
+            return await self.async_step_user()
 
         # query the list of writable sensors if it is currently empty
         # this happens if a user updates from config v1 (pre-writable-sensors) to v2
@@ -414,6 +434,49 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
             _LOGGER.info("Added %i new sensors", added_sensor_count)
 
+        return await self.async_step_user()
+
+    async def async_step_devices(self, user_input: dict = None):
+        """Show form to select devices."""
+        if user_input is not None:
+            chosen_devices = user_input.get("chosen_devices", [])
+            self.data["chosen_devices"] = chosen_devices
+            self.data["no_devices_selected"] = False  # Clear the flag
+
+            if chosen_devices:
+                (
+                    self.data[FLOAT_DICT],
+                    self.data[SWITCHES_DICT],
+                    self.data[TEXT_DICT],
+                    self.data[WRITABLE_DICT],
+                ) = await self._get_possible_endpoints(
+                    self.data[CONF_HOST],
+                    self.data[CONF_PORT],
+                    self.data[FORCE_LEGACY_MODE],
+                    chosen_devices,
+                )
+            # Create the config entry here.
+            return self.async_create_entry(
+                title=f"ETA at {self.data[CONF_HOST]}", data=self.data
+            )
+
+        return self.async_show_form(
+            step_id="devices",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("chosen_devices"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(value=device, label=device)
+                                for device in self.data.get("possible_devices", [])
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            multiple=True,
+                        )
+                    ),
+                }
+            ),
+        )
         return await self.async_step_user()
 
     async def async_step_user(self, user_input=None):
@@ -490,12 +553,17 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def _show_config_form_endpoint(
         self,
-        current_chosen_sensors,
-        current_chosen_switches,
-        current_chosen_text_sensors,
-        current_chosen_writable_sensors,
+        current_chosen_sensors: list[str],
+        current_chosen_switches: list[str],
+        current_chosen_text_sensors: list[str],
+        current_chosen_writable_sensors: list[str],
     ):
-        """Show the configuration form to select which endpoints should become entities."""
+        """Show the configuration form to select which endpoints should become entities.
+        The default arguments for this function must be lists, otherwise the Selectors will crash
+        """
+
+        _LOGGER.debug("Displaying option flow endpoint selection form")
+
         # Create shallow copies of the dicts to make sure the del operators below won't delete the original data
         sensors_dict: dict[str, ETAEndpoint] = copy.copy(self.data[FLOAT_DICT])
         switches_dict: dict[str, ETAEndpoint] = copy.copy(self.data[SWITCHES_DICT])
