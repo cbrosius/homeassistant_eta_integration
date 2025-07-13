@@ -52,7 +52,7 @@
     "entity": {
         "button": {
             "send_error_events_btn": {
-                "name": "Resend Error Events",
+                "name": "Resend Error Events"
             }
         },
         "binary_sensor": {
