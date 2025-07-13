@@ -1,7 +1,7 @@
 """
 Platform for ETA number integration in Home Assistant
 
-author Tidone
+author cbrosius
 
 """
 

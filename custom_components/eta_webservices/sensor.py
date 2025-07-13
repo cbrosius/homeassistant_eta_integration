@@ -6,7 +6,7 @@ Help Links:
  SensorEntity derives from Entity https://github.com/home-assistant/core/blob/dev/homeassistant/components/sensor/__init__.py
 
 
-author nigl, Tidone
+author nigl, Tidone, cbrosius
 
 """
 

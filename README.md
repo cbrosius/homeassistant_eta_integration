@@ -33,7 +33,7 @@ This is a fork of [nigl's repo](https://github.com/nigl/homeassistant_eta_integr
 This integration can be configured directly in Home Assistant via HACS:
 
 1. Go to `HACS` -> `Integrations` -> Click on the three dots in the top right corner --> Click on `Userdefined repositories`
-1. Insert `https://github.com/Tidone/homeassistant_eta_integration` into the field `Repository`
+1. Insert `https://github.com/cbrosius/homeassistant_eta_integration` into the field `Repository`
 1. Choose `Integration` in the dropdown field `Category`.
 1. Click on the `Add` button.
 1. Then search for the new added `ETA` integration, click on it and the click on the button `Download` on the bottom right corner
