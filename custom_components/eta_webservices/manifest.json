@@ -1,12 +1,24 @@
 {
   "domain": "eta_webservices",
-  "name": "Eta Sensors",
+  "name": "myEta Sensors",
   "codeowners": ["@nigl", "@Tidone", "@cbrosius"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/cbrosius/homeassistant_eta_integration",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/cbrosius/homeassistant_eta_integration/issues",
+  "loggers": ["myETA"],
   "requirements": ["xmltodict", "packaging"],
-  "version": "1.1.6"
-}
+  "version": "0.0.0.6",
+  "repairs": true,
+  "integration_type": "hub",
+  "translations": [
+    {
+      "type": "json",
+      "path": "translations/en.json"
+    },
+    {
+      "type": "json",
+      "path": "translations/de.json"
+    }
+  ]
