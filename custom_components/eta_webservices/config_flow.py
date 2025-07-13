@@ -110,10 +110,8 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 self.data["chosen_devices"],
             )
 
-            # Create the config entry here.
-            return self.async_create_entry(
-                title=f"ETA at {self.data[CONF_HOST]}", data=self.data
-            )
+            # Create the config entry here and stop the flow.
+            return self.async_create_entry(title=f"ETA at {self.data[CONF_HOST]}", data=self.data)
 
             return await self.async_step_select_entities()
 
