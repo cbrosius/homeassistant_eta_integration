@@ -44,6 +44,7 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup sensors from a config entry created in the integrations UI."""
+    _LOGGER.debug("Setting up number entities.")
     config = hass.data[DOMAIN][config_entry.entry_id]
 
     coordinator = config[WRITABLE_UPDATE_COORDINATOR]
@@ -56,7 +57,9 @@ async def async_setup_entry(
         for entity in chosen_writable_sensors
         if config[WRITABLE_DICT][entity]["unit"]
         not in INVISIBLE_UNITS  # exclude all endpoints with a custom unit (e.g. time endpoints)
-    ]
+    ] 
+    _LOGGER.debug("Adding %d number entities: %s", len(sensors), [sensor._attr_unique_id for sensor in sensors])
+
     async_add_entities(sensors, update_before_add=True)
 
 

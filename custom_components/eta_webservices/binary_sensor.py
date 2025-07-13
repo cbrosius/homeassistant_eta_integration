@@ -25,7 +25,7 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup error sensor"""
-    config = hass.data[DOMAIN][config_entry.entry_id]
+    config = hass.data[DOMAIN][config_entry.entry_id] 
 
     error_coordinator = config[ERROR_UPDATE_COORDINATOR]
 

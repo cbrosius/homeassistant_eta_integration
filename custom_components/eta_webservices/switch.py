@@ -25,6 +25,7 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup switches from a config entry created in the integrations UI."""
+    _LOGGER.debug("Setting up switch entities.")
     config = hass.data[DOMAIN][config_entry.entry_id]
 
     chosen_entities = config[CHOSEN_SWITCHES]
@@ -32,6 +33,8 @@ async def async_setup_entry(
         EtaSwitch(config, hass, entity, config[SWITCHES_DICT][entity])
         for entity in chosen_entities
     ]
+    _LOGGER.debug("Adding %d switch entities: %s", len(switches), [switch._attr_unique_id for switch in switches])
+
     async_add_entities(switches, update_before_add=True)
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 from homeassistant.components.button import ButtonEntity, ENTITY_ID_FORMAT
 from homeassistant.config_entries import ConfigEntry
@@ -11,6 +12,8 @@ from homeassistant.helpers import config_entry_flow
 
 from .const import DOMAIN, ERROR_UPDATE_COORDINATOR
 from .coordinator import ETAErrorUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 from .utils import create_device_info
 
 
@@ -19,6 +22,8 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    """Set up the button platform."""
+    _LOGGER.debug("Setting up button entities.")
     config = hass.data[DOMAIN][config_entry.entry_id]
     error_coordinator = config[ERROR_UPDATE_COORDINATOR]
 
@@ -26,7 +31,9 @@ async def async_setup_entry(
 
     # Add a button to configure entities for each selected device.
     for device_name in config.get("chosen_devices", []):
+        _LOGGER.debug("Adding config button for device: %s", device_name)
         buttons.append(EtaDeviceConfigButton(config, hass, device_name))
+    _LOGGER.debug("Found %d button entities: %s", len(buttons), [button.__class__.__name__ for button in buttons])
 
     async_add_entities(buttons)
 
@@ -41,7 +48,7 @@ class EtaResendErrorEventsButton(ButtonEntity):
         self,
         config: dict,
         hass: HomeAssistant,
-        device_name: str,
+        coordinator: ETAErrorUpdateCoordinator
     ) -> None:
         host = config.get(CONF_HOST)
         port = config.get(CONF_PORT)

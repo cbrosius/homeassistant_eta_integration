@@ -49,6 +49,7 @@ async def async_setup_entry(
     hass.data[DOMAIN][entry.entry_id] = config
 
     # Forward the setup to the sensor platform.
+    _LOGGER.debug("Forwarding entry setup to platforms: %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     await async_setup_services(hass, entry)

@@ -33,6 +33,7 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup time sensors from a config entry created in the integrations UI."""
+    _LOGGER.debug("Setting up time entities.")
     config = hass.data[DOMAIN][config_entry.entry_id]
 
     coordinator = config[WRITABLE_UPDATE_COORDINATOR]
@@ -43,6 +44,8 @@ async def async_setup_entry(
         for entity in chosen_entities
         if config[WRITABLE_DICT][entity]["unit"] == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
     ]
+    _LOGGER.debug("Adding %d time entities: %s", len(time_sensors), [sensor._attr_unique_id for sensor in time_sensors])
+
     async_add_entities(time_sensors, update_before_add=True)
 
 
