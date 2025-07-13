@@ -105,7 +105,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 self.data[SWITCHES_DICT],
                 self.data[TEXT_DICT],
                 self.data[WRITABLE_DICT],
-            ) = await self._get_possible_endpoints_from_devices(
+            ) = await self._get_possible_endpoints(
                 self.data[CONF_HOST],
                 self.data[CONF_PORT],  #
                 self.data[FORCE_LEGACY_MODE],
