@@ -73,23 +73,23 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.parent.setLevel(logging.DEBUG)
 
                 self.data = user_input
-                self.data["possible_devices"] = await self._get_possible_devices(user_input[CONF_HOST], user_input[CONF_PORT])
+                self.data["possible_devices"] = await self._get_possible_devices(
+                    user_input[CONF_HOST], user_input[CONF_PORT]
+                )
 
                 if not self.data["possible_devices"]:
                     self._errors["base"] = "no_devices_found"
                     return await self._show_config_form_user(user_input)
                 return await self.async_step_select_devices()
             else:
-                self._errors["base"] = (
-                    "no_eta_endpoint" if valid == 0 else "unknown_host"
-                )
+                self._errors["base"] = "no_eta_endpoint" if valid == 0 else "unknown_host"
 
             return await self._show_config_form_user(user_input)
 
         user_input = {}
         # Provide defaults for form
-        user_input[CONF_HOST] = "0.0.0.0"
-        user_input[CONF_PORT] = "8080"
+        user_input[CONF_HOST] = "192.168.60.199"
+        user_input[CONF_PORT] = "49999"
 
         return await self._show_config_form_user(user_input)
 
@@ -105,9 +105,14 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 self.data[WRITABLE_DICT],
             ) = await self._get_possible_endpoints(
                 self.data[CONF_HOST],
-                self.data[CONF_PORT],
+                self.data[CONF_PORT],  #
                 self.data[FORCE_LEGACY_MODE],
                 self.data["chosen_devices"],
+            )
+
+            # Create the config entry here.
+            return self.async_create_entry(
+                title=f"ETA at {self.data[CONF_HOST]}", data=self.data
             )
 
             return await self.async_step_select_entities()

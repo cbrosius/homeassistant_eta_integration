@@ -52,7 +52,8 @@
     "entity": {
         "button": {
             "send_error_events_btn": {
-                "name": "Resend Error Events"
+                "name": "Resend Error Events",
+                "configure_device_entities": {"name": "Configure device entities"},
             }
         },
         "binary_sensor": {
