@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+
+  release_zip:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Extract Tag Without `v`
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/} # Remove refs/tags/
+          TAG_NAME=${TAG_NAME#v}            # Remove leading v if present
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+      - name: Update version
+        run: |
+          python3 .github/update_version.py --version $TAG_NAME
+      - name: Zip eta_webservices dir
+        run: |
+          cd custom_components/eta_webservices
+          zip myETA.zip -r ./
+      - name: Upload zip to release
+        uses: svenstaro/upload-release-action@v2
+
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: custom_components/eta_webservices/myETA.zip
+          asset_name: myETA.zip
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  releasenotes:
+    name: Prepare releasenotes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install requirements
+        run: |
+          python3 -m pip install setuptools wheel PyGithub
+
+      - name: Update release notes
+        run: |
+          python3 .github/generate_releasenotes.py --token ${{ secrets.GITHUB_TOKEN }} --release yes --tag ${{ github.ref }}
