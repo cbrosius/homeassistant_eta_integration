@@ -6,7 +6,7 @@ def main():
     parser.read("Pipfile")
 
     packages = "packages"
-    with open("requirements.txt", "w") as f:
+    with open("requirements_dev.txt", "w") as f:
         for key in parser[packages]:
             value = parser[packages][key]
             f.write(key + value.replace('"', "") + "\n")
