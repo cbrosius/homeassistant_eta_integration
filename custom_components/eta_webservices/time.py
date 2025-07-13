@@ -44,7 +44,11 @@ async def async_setup_entry(
         for entity in chosen_entities
         if config[WRITABLE_DICT][entity]["unit"] == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
     ]
-    _LOGGER.debug("Adding %d time entities: %s", len(time_sensors), [sensor._attr_unique_id for sensor in time_sensors])
+    _LOGGER.debug(
+        "Adding %d time entities: %s",
+        len(time_sensors),
+        [sensor._attr_unique_id for sensor in time_sensors],
+    )
 
     async_add_entities(time_sensors, update_before_add=True)
 

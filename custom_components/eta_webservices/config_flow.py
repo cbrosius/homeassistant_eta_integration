@@ -114,7 +114,6 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
             return await self.async_step_select_entities()
 
-
         return self.async_show_form(
             step_id="select_devices",
             data_schema=vol.Schema(
@@ -145,7 +144,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # add chosen entities to data
-            _LOGGER.debug("Processing user input: %s", user_input) # Added log
+            _LOGGER.debug("Processing user input: %s", user_input)  # Added log
             self.data[CHOSEN_FLOAT_SENSORS] = user_input.get(CHOSEN_FLOAT_SENSORS, [])
             self.data[CHOSEN_SWITCHES] = user_input.get(CHOSEN_SWITCHES, [])
             self.data[CHOSEN_TEXT_SENSORS] = user_input.get(CHOSEN_TEXT_SENSORS, [])
@@ -186,7 +185,13 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
         )
 
-    async def _show_config_form_endpoint(self, current_chosen_sensors = [], current_chosen_switches = [], current_chosen_text_sensors = [], current_chosen_writable_sensors = []):
+    async def _show_config_form_endpoint(
+        self,
+        current_chosen_sensors=[],
+        current_chosen_switches=[],
+        current_chosen_text_sensors=[],
+        current_chosen_writable_sensors=[],
+    ):
         """Show the configuration form to select which endpoints should become entities."""
         sensors_dict: dict[str, ETAEndpoint] = self.data[FLOAT_DICT]
         switches_dict: dict[str, ETAEndpoint] = self.data[SWITCHES_DICT]
@@ -310,11 +315,12 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return 1 if does_endpoint_exist else 0
 
     async def _get_all_sensors_from_device(
-        self, host, port, force_legacy_mode, device_name: str):
+        self, host, port, force_legacy_mode, device_name: str
+    ):
         """Get all possible endpoints for a specific device."""
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, host, port)
-        
+
         float_dict = {}
         switches_dict = {}
         text_dict = {}
@@ -323,7 +329,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             force_legacy_mode,
             float_dict,
             switches_dict,
-            text_dict, 
+            text_dict,
             writable_dict,
             [device_name],  # Filter by device
         )
@@ -332,7 +338,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             f"Queried sensors for device {device_name}: Number of float sensors: {len(float_dict)}, Number of switches: {len(switches_dict)}, Number of text sensors: {len(text_dict)}, Number of writable sensors: {len(writable_dict)}"
         )
 
-        return float_dict, switches_dict, text_dict, writable_dict 
+        return float_dict, switches_dict, text_dict, writable_dict
 
     async def _is_correct_api_version(self, host, port):
         session = async_get_clientsession(self.hass)

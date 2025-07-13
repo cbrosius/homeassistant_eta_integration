@@ -33,7 +33,11 @@ async def async_setup_entry(
         EtaSwitch(config, hass, entity, config[SWITCHES_DICT][entity])
         for entity in chosen_entities
     ]
-    _LOGGER.debug("Adding %d switch entities: %s", len(switches), [switch._attr_unique_id for switch in switches])
+    _LOGGER.debug(
+        "Adding %d switch entities: %s",
+        len(switches),
+        [switch._attr_unique_id for switch in switches],
+    )
 
     async_add_entities(switches, update_before_add=True)
 

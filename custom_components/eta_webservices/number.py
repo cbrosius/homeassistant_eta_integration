@@ -57,8 +57,12 @@ async def async_setup_entry(
         for entity in chosen_writable_sensors
         if config[WRITABLE_DICT][entity]["unit"]
         not in INVISIBLE_UNITS  # exclude all endpoints with a custom unit (e.g. time endpoints)
-    ] 
-    _LOGGER.debug("Adding %d number entities: %s", len(sensors), [sensor._attr_unique_id for sensor in sensors])
+    ]
+    _LOGGER.debug(
+        "Adding %d number entities: %s",
+        len(sensors),
+        [sensor._attr_unique_id for sensor in sensors],
+    )
 
     async_add_entities(sensors, update_before_add=True)
 

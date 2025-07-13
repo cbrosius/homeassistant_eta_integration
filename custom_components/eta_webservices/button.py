@@ -33,7 +33,11 @@ async def async_setup_entry(
     for device_name in config.get("chosen_devices", []):
         _LOGGER.debug("Adding config button for device: %s", device_name)
         buttons.append(EtaDeviceConfigButton(config, hass, device_name))
-    _LOGGER.debug("Found %d button entities: %s", len(buttons), [button.__class__.__name__ for button in buttons])
+    _LOGGER.debug(
+        "Found %d button entities: %s",
+        len(buttons),
+        [button.__class__.__name__ for button in buttons],
+    )
 
     async_add_entities(buttons)
 
@@ -45,10 +49,7 @@ class EtaResendErrorEventsButton(ButtonEntity):
     _attr_should_poll = False
 
     def __init__(
-        self,
-        config: dict,
-        hass: HomeAssistant,
-        coordinator: ETAErrorUpdateCoordinator
+        self, config: dict, hass: HomeAssistant, coordinator: ETAErrorUpdateCoordinator
     ) -> None:
         host = config.get(CONF_HOST)
         port = config.get(CONF_PORT)
