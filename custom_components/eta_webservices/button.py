@@ -22,9 +22,7 @@ async def async_setup_entry(
     config = hass.data[DOMAIN][config_entry.entry_id]
     error_coordinator = config[ERROR_UPDATE_COORDINATOR]
 
-    buttons = [
-        EtaResendErrorEventsButton(config, hass, error_coordinator)
-    ]
+    buttons = [EtaResendErrorEventsButton(config, hass, error_coordinator)]
 
     # Add a button to configure entities for each selected device.
     for device_name in config.get("chosen_devices", []):
@@ -44,8 +42,6 @@ class EtaResendErrorEventsButton(ButtonEntity):
         config: dict,
         hass: HomeAssistant,
         device_name: str,
-    ) -> None:
-        self, config: dict, hass: HomeAssistant, coordinator: ETAErrorUpdateCoordinator
     ) -> None:
         host = config.get(CONF_HOST)
         port = config.get(CONF_PORT)
@@ -81,7 +77,9 @@ class EtaDeviceConfigButton(ButtonEntity):
         host = config.get(CONF_HOST)
         port = config.get(CONF_PORT)
 
-        self._attr_translation_key = "configure_device_entities"  # Add this to your translations!
+        self._attr_translation_key = (
+            "configure_device_entities"  # Add this to your translations!
+        )
         self._attr_unique_id = (
             f"eta_{host.replace('.', '_')}_{port}_{device_name}_config_btn"
         )

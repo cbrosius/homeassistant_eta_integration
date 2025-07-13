@@ -183,7 +183,13 @@ class EtaAPI:
         return uri_dict
 
     async def get_all_sensors(
-        self, force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict, chosen_devices: list[str] = None
+        self,
+        force_legacy_mode,
+        float_dict,
+        switches_dict,
+        text_dict,
+        writable_dict,
+        chosen_devices: list[str] = None,
     ):
         if not force_legacy_mode and await self.is_correct_api_version():
             _LOGGER.debug("Get all sensors - API v1.2")
@@ -191,13 +197,13 @@ class EtaAPI:
             return await self._get_all_sensors_v12(
                 float_dict, switches_dict, text_dict, writable_dict, chosen_devices
             )
-        
+
         _LOGGER.debug("Get all sensors - API v1.1")
         # varinfo not available -> fall back to compatibility mode
         return await self._get_all_sensors_v11(
             float_dict, switches_dict, text_dict, writable_dict, chosen_devices
         )
-    
+
     def _get_friendly_name(self, key: str):
         components = key.split("_")[1:]  # The first part ist always empty
         return " > ".join(components)
@@ -231,7 +237,12 @@ class EtaAPI:
         endpoint_info["valid_values"]["scale_factor"] = int(raw_dict["@scaleFactor"])
 
     async def _get_all_sensors_v11(
-        self, float_dict, switches_dict, text_dict, writable_dict, chosen_devices: list[str] = None
+        self,
+        float_dict,
+        switches_dict,
+        text_dict,
+        writable_dict,
+        chosen_devices: list[str] = None,
     ):
         all_endpoints = await self._get_sensors_dict()
         _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
@@ -246,10 +257,11 @@ class EtaAPI:
                 fub = key.split("_")[1]
                 if chosen_devices and fub not in chosen_devices:
                     _LOGGER.debug(
-                        "Skipping endpoint %s because it's not in the chosen devices", key
+                        "Skipping endpoint %s because it's not in the chosen devices",
+                        key,
                     )
                     continue
-                
+
                 _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
 
                 queried_endpoints.append(all_endpoints[key])
@@ -305,15 +317,20 @@ class EtaAPI:
         valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
         for key in endpoint_info["valid_values"]:
             if key in ("Ein", "On", "Ja", "Yes"):
-                valid_values["on_value"] = endpoint_info["valid_values"][key] 
+                valid_values["on_value"] = endpoint_info["valid_values"][key]
             elif key in ("Aus", "Off", "Nein", "No"):
                 valid_values["off_value"] = endpoint_info["valid_values"][key]
         endpoint_info["valid_values"] = valid_values
 
     async def _get_all_sensors_v12(
-        self, float_dict, switches_dict, text_dict, writable_dict, chosen_devices: list[str] = None
+        self,
+        float_dict,
+        switches_dict,
+        text_dict,
+        writable_dict,
+        chosen_devices: list[str] = None,
     ):
-        all_endpoints = await self._get_sensors_dict() 
+        all_endpoints = await self._get_sensors_dict()
         _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
         queried_endpoints = []
         for key in all_endpoints:
@@ -326,7 +343,8 @@ class EtaAPI:
                 fub = key.split("_")[1]
                 if chosen_devices and fub not in chosen_devices:
                     _LOGGER.debug(
-                        "Skipping endpoint %s because it's not in the chosen devices", key
+                        "Skipping endpoint %s because it's not in the chosen devices",
+                        key,
                     )
                     continue
 
@@ -543,9 +561,11 @@ class EtaAPI:
                 ETAError(
                     msg=error["@msg"],
                     priority=error["@priority"],
-                    time=datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S")
-                    if error.get("@time", "") != ""
-                    else datetime.now,
+                    time=(
+                        datetime.strptime(error["@time"], "%Y-%m-%d %H:%M:%S")
+                        if error.get("@time", "") != ""
+                        else datetime.now
+                    ),
                     text=error["#text"],
                     fub=fub_name,
                     host=self._host,

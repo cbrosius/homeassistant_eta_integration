@@ -82,7 +82,9 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     return await self._show_config_form_user(user_input)
                 return await self.async_step_select_devices()
             else:
-                self._errors["base"] = "no_eta_endpoint" if valid == 0 else "unknown_host"
+                self._errors["base"] = (
+                    "no_eta_endpoint" if valid == 0 else "unknown_host"
+                )
 
             return await self._show_config_form_user(user_input)
 
@@ -111,7 +113,9 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             # Create the config entry here and stop the flow.
-            return self.async_create_entry(title=f"ETA at {self.data[CONF_HOST]}", data=self.data)
+            return self.async_create_entry(
+                title=f"ETA at {self.data[CONF_HOST]}", data=self.data
+            )
 
             return await self.async_step_select_entities()
 
@@ -132,7 +136,10 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
         )
-    async def async_step_select_entities(self, chosen_devices: list[str] = None, user_input: dict = None):
+
+    async def async_step_select_entities(
+        self, chosen_devices: list[str] = None, user_input: dict = None
+    ):
         """Second step in config flow to add a repo to watch."""
         if user_input is not None:
             # add chosen entities to data
@@ -159,13 +166,15 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         return EtaOptionsFlowHandler(config_entry)
 
-    async def _show_config_form_user(self, user_input):  # pylint: disable=unused-argument
+    async def _show_config_form_user(
+        self, user_input
+    ):  # pylint: disable=unused-argument
         """Show the configuration form to edit host and port data."""
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST, default=user_input[CONF_HOST]): str, #
+                    vol.Required(CONF_HOST, default=user_input[CONF_HOST]): str,  #
                     vol.Required(CONF_PORT, default=user_input[CONF_PORT]): str,
                     vol.Required(FORCE_LEGACY_MODE, default=False): cv.boolean,
                     vol.Required(ENABLE_DEBUG_LOGGING, default=False): cv.boolean,
@@ -173,7 +182,6 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=self._errors,
         )
-
 
     async def _show_config_form_endpoint(self):
         """Show the configuration form to select which endpoints should become entities."""
@@ -269,7 +277,12 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         text_dict = {}
         writable_dict = {}
         await eta_client.get_all_sensors(
-            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict, chosen_devices # Pass chosen_devices
+            force_legacy_mode,
+            float_dict,
+            switches_dict,
+            text_dict,
+            writable_dict,
+            chosen_devices,  # Pass chosen_devices
         )
 
         _LOGGER.debug(
@@ -279,7 +292,6 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             len(text_dict),
             len(writable_dict),
         )
-
 
         return float_dict, switches_dict, text_dict, writable_dict
 
@@ -293,7 +305,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         except:
             return -1
         return 1 if does_endpoint_exist else 0
-    
+
     async def _get_all_sensors_from_device(
         self, host, port, force_legacy_mode, device_name: str
     ):
@@ -306,7 +318,12 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         text_dict = {}
         writable_dict = {}
         await eta_client.get_all_sensors(
-            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict, [device_name] # Filter by device
+            force_legacy_mode,
+            float_dict,
+            switches_dict,
+            text_dict,
+            writable_dict,
+            [device_name],  # Filter by device
         )
 
         _LOGGER.debug(
@@ -353,7 +370,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             _, _, _, self.data[WRITABLE_DICT] = await self._get_possible_endpoints(
                 self.data[CONF_HOST], self.data[CONF_PORT], self.data[FORCE_LEGACY_MODE]
             )
-        
+
         if self.data.get(FORCE_SENSOR_DETECTION, False):
             _LOGGER.info("Forcing new endpoint discovery")
             self.data[FORCE_SENSOR_DETECTION] = False
