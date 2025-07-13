@@ -103,7 +103,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 self.data[SWITCHES_DICT],
                 self.data[TEXT_DICT],
                 self.data[WRITABLE_DICT],
-            ) = await self._get_possible_endpoints(
+            ) = await self._get_possible_endpoints_from_devices(
                 self.data[CONF_HOST],
                 self.data[CONF_PORT],  #
                 self.data[FORCE_LEGACY_MODE],
@@ -269,7 +269,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         text_dict = {}
         writable_dict = {}
         await eta_client.get_all_sensors(
-            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict, chosen_devices
+            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict, chosen_devices # Pass chosen_devices
         )
 
         _LOGGER.debug(
@@ -293,6 +293,27 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         except:
             return -1
         return 1 if does_endpoint_exist else 0
+    
+    async def _get_all_sensors_from_device(
+        self, host, port, force_legacy_mode, device_name: str
+    ):
+        """Get all possible endpoints for a specific device."""
+        session = async_get_clientsession(self.hass)
+        eta_client = EtaAPI(session, host, port)
+
+        float_dict = {}
+        switches_dict = {}
+        text_dict = {}
+        writable_dict = {}
+        await eta_client.get_all_sensors(
+            force_legacy_mode, float_dict, switches_dict, text_dict, writable_dict, [device_name] # Filter by device
+        )
+
+        _LOGGER.debug(
+            f"Queried sensors for device {device_name}: Number of float sensors: {len(float_dict)}, Number of switches: {len(switches_dict)}, Number of text sensors: {len(text_dict)}, Number of writable sensors: {len(writable_dict)}"
+        )
+
+        return float_dict, switches_dict, text_dict, writable_dict
 
     async def _is_correct_api_version(self, host, port):
         session = async_get_clientsession(self.hass)

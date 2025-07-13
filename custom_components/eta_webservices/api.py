@@ -189,7 +189,7 @@ class EtaAPI:
             _LOGGER.debug("Get all sensors - API v1.2")
             # New version with varinfo endpoint detected
             return await self._get_all_sensors_v12(
-                float_dict, switches_dict, text_dict, writable_dict
+                float_dict, switches_dict, text_dict, writable_dict, chosen_devices
             )
         
         _LOGGER.debug("Get all sensors - API v1.1")
@@ -305,15 +305,15 @@ class EtaAPI:
         valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
         for key in endpoint_info["valid_values"]:
             if key in ("Ein", "On", "Ja", "Yes"):
-                valid_values["on_value"] = endpoint_info["valid_values"][key]
+                valid_values["on_value"] = endpoint_info["valid_values"][key] 
             elif key in ("Aus", "Off", "Nein", "No"):
                 valid_values["off_value"] = endpoint_info["valid_values"][key]
         endpoint_info["valid_values"] = valid_values
 
     async def _get_all_sensors_v12(
-        self, float_dict, switches_dict, text_dict, writable_dict
+        self, float_dict, switches_dict, text_dict, writable_dict, chosen_devices: list[str] = None
     ):
-        all_endpoints = await self._get_sensors_dict()
+        all_endpoints = await self._get_sensors_dict() 
         _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
         queried_endpoints = []
         for key in all_endpoints:
@@ -321,6 +321,13 @@ class EtaAPI:
                 if all_endpoints[key] in queried_endpoints:
                     _LOGGER.debug("Skipping duplicate endpoint %s", all_endpoints[key])
                     # ignore duplicate endpoints
+                    continue
+
+                fub = key.split("_")[1]
+                if chosen_devices and fub not in chosen_devices:
+                    _LOGGER.debug(
+                        "Skipping endpoint %s because it's not in the chosen devices", key
+                    )
                     continue
 
                 _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
