@@ -1,5 +1,7 @@
 from abc import abstractmethod
+import logging
 from typing import Any, Generic, TypeVar, cast
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, callback
@@ -8,8 +10,10 @@ from homeassistant.helpers.entity import Entity, generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import ETAEndpoint, EtaAPI
-from .utils import create_device_info
 from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
+from .utils import create_device_info
+
+_LOGGER = logging.getLogger(__name__)
 
 _EntityT = TypeVar("_EntityT")
 
