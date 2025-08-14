@@ -14,28 +14,25 @@ from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
 from .api import EtaAPI, ETAEndpoint, ETAValidWritableValues
-from .entity import EtaWritableSensorEntity
-
+from .entity import EtaCoordinatorEntity
 from homeassistant.components.number import (
     NumberDeviceClass,
     NumberEntity,
     NumberMode,
     ENTITY_ID_FORMAT,
 )
-
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant import config_entries
 from homeassistant.const import EntityCategory
-from .coordinator import ETAWritableUpdateCoordinator
+from .coordinator import EtaDataUpdateCoordinator
 from .const import (
     DOMAIN,
     CHOSEN_WRITABLE_SENSORS,
     WRITABLE_DICT,
-    WRITABLE_UPDATE_COORDINATOR,
+    DATA_UPDATE_COORDINATOR,
     INVISIBLE_UNITS,
 )
-
-SCAN_INTERVAL = timedelta(minutes=1)
+from .utils import create_device_info
 
 
 async def async_setup_entry(
@@ -44,81 +41,73 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup sensors from a config entry created in the integrations UI."""
-    _LOGGER.debug("Setting up number entities.")
-    config = hass.data[DOMAIN][config_entry.entry_id]
+    entry_id = config_entry.entry_id
+    config = hass.data[DOMAIN][entry_id]["config_entry_data"]
+    numbers = []
 
-    coordinator = config[WRITABLE_UPDATE_COORDINATOR]
+    for device_name in config.get("chosen_devices", []):
+        if device_name in hass.data[DOMAIN][entry_id]:
+            device_data = hass.data[DOMAIN][entry_id][device_name]
+            coordinator = device_data[DATA_UPDATE_COORDINATOR]
+            device_info = create_device_info(
+                config["host"], config["port"], device_name
+            )
 
-    chosen_writable_sensors = config[CHOSEN_WRITABLE_SENSORS]
-    sensors = [
-        EtaWritableNumberSensor(
-            config, hass, entity, config[WRITABLE_DICT][entity], coordinator
-        )
-        for entity in chosen_writable_sensors
-        if config[WRITABLE_DICT][entity]["unit"]
-        not in INVISIBLE_UNITS  # exclude all endpoints with a custom unit (e.g. time endpoints)
-    ]
-    _LOGGER.debug(
-        "Adding %d number entities: %s",
-        len(sensors),
-        [sensor._attr_unique_id for sensor in sensors],
-    )
+            for unique_id, endpoint_info in device_data.get(
+                WRITABLE_DICT, {}
+            ).items():
+                if unique_id in device_data.get(
+                    CHOSEN_WRITABLE_SENSORS, []
+                ) and endpoint_info.get("unit") not in INVISIBLE_UNITS:
+                    numbers.append(
+                        EtaWritableNumberSensor(
+                            coordinator,
+                            config,
+                            hass,
+                            unique_id,
+                            endpoint_info,
+                            device_info,
+                        )
+                    )
 
-    async_add_entities(sensors, update_before_add=True)
+    async_add_entities(numbers, update_before_add=True)
 
 
-class EtaWritableNumberSensor(NumberEntity, EtaWritableSensorEntity):
+class EtaWritableNumberSensor(EtaCoordinatorEntity, NumberEntity):
     """Representation of a Number Entity."""
 
     def __init__(
         self,
+        coordinator: EtaDataUpdateCoordinator,
         config: dict,
         hass: HomeAssistant,
         unique_id: str,
         endpoint_info: ETAEndpoint,
-        coordinator: ETAWritableUpdateCoordinator,
+        device_info,
     ) -> None:
-        """
-        Initialize sensor.
-
-        To show all values: http://192.168.178.75:8080/user/menu
-
-        """
-        _LOGGER.info("ETA Integration - init writable number sensor")
-
+        """Initialize sensor."""
         super().__init__(
-            coordinator, config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT
+            coordinator,
+            config,
+            hass,
+            unique_id,
+            endpoint_info,
+            ENTITY_ID_FORMAT,
+            device_info,
         )
 
         self._attr_device_class = self.determine_device_class(endpoint_info["unit"])
         self.valid_values: ETAValidWritableValues = endpoint_info["valid_values"]
-
         self._attr_native_unit_of_measurement = endpoint_info["unit"]
         if self._attr_native_unit_of_measurement == "":
             self._attr_native_unit_of_measurement = None
-
         self._attr_entity_category = EntityCategory.CONFIG
-
         self._attr_mode = NumberMode.BOX
         self._attr_native_min_value = endpoint_info["valid_values"]["scaled_min_value"]
         self._attr_native_max_value = endpoint_info["valid_values"]["scaled_max_value"]
         self._attr_native_step = pow(
             10, endpoint_info["valid_values"]["dec_places"] * -1
-        )  # calculate the step size based on the number of decimal places
-
-    def handle_data_updates(self, data: float) -> None:
-        # Extract the device name from the unique_id
-        parts = self._attr_unique_id.split("_")
-        if len(parts) >= 3:
-            device_name = parts[2]
-        else:
-            device_name = "Unknown"
-            _LOGGER.warning(
-                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
-                self._attr_unique_id,
-            )
-        self._attr_device_info = create_device_info(self.host, self.port, device_name)
-        self._attr_native_value = data
+        )
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""

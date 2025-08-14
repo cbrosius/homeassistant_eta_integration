@@ -23,21 +23,20 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the button platform."""
-    _LOGGER.debug("Setting up button entities.")
-    config = hass.data[DOMAIN][config_entry.entry_id]
-    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
+    entry_id = config_entry.entry_id
+    config = hass.data[DOMAIN][entry_id]["config_entry_data"]
+    buttons = []
 
-    buttons = [EtaResendErrorEventsButton(config, hass, error_coordinator)]
+    # Global error resend button
+    error_coordinator = hass.data[DOMAIN][entry_id][ERROR_UPDATE_COORDINATOR]
+    buttons.append(EtaResendErrorEventsButton(config, hass, error_coordinator))
 
-    # Add a button to configure entities for each selected device.
+    # Device-specific config buttons
     for device_name in config.get("chosen_devices", []):
-        _LOGGER.debug("Adding config button for device: %s", device_name)
-        buttons.append(EtaDeviceConfigButton(config, hass, device_name))
-    _LOGGER.debug(
-        "Found %d button entities: %s",
-        len(buttons),
-        [button.__class__.__name__ for button in buttons],
-    )
+        device_info = create_device_info(
+            config["host"], config["port"], device_name
+        )
+        buttons.append(EtaDeviceConfigButton(config, hass, device_name, device_info))
 
     async_add_entities(buttons)
 
@@ -90,24 +89,22 @@ class EtaDeviceConfigButton(ButtonEntity):
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, config: dict, hass: HomeAssistant, device_name: str) -> None:
+    def __init__(
+        self, config: dict, hass: HomeAssistant, device_name: str, device_info
+    ) -> None:
         self.device_name = device_name
         self.hass = hass
         host = config.get(CONF_HOST)
         port = config.get(CONF_PORT)
 
-        self._attr_translation_key = (
-            "configure_device_entities"  # Add this to your translations!
-        )
+        self._attr_translation_key = "configure_device_entities"
         self._attr_unique_id = (
             f"eta_{host.replace('.', '_')}_{port}_{device_name}_config_btn"
         )
         self.entity_id = generate_entity_id(
             ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
         )
-        self._attr_device_info = create_device_info(
-            host, port, self.device_name
-        )  # Use provided device_name
+        self._attr_device_info = device_info
         self._attr_name = f"Configure {device_name}"
 
     async def async_press(self) -> None:

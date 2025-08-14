@@ -26,9 +26,9 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup error sensor"""
-    config = hass.data[DOMAIN][config_entry.entry_id]
+    config = hass.data[DOMAIN][config_entry.entry_id]["config_entry_data"]
 
-    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
+    error_coordinator = hass.data[DOMAIN][config_entry.entry_id][ERROR_UPDATE_COORDINATOR]
 
     sensors = [EtaErrorSensor(config, hass, error_coordinator)]
     async_add_entities(sensors, update_before_add=True)

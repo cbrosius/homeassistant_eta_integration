@@ -185,24 +185,16 @@ class EtaAPI:
     async def get_all_sensors(
         self,
         force_legacy_mode,
-        float_dict,
-        switches_dict,
-        text_dict,
-        writable_dict,
-        chosen_devices: list[str] = None,
+        device_name: str,
     ):
         if not force_legacy_mode and await self.is_correct_api_version():
             _LOGGER.debug("Get all sensors - API v1.2")
             # New version with varinfo endpoint detected
-            return await self._get_all_sensors_v12(
-                float_dict, switches_dict, text_dict, writable_dict, chosen_devices
-            )
+            return await self._get_all_sensors_v12(device_name)
 
         _LOGGER.debug("Get all sensors - API v1.1")
         # varinfo not available -> fall back to compatibility mode
-        return await self._get_all_sensors_v11(
-            float_dict, switches_dict, text_dict, writable_dict, chosen_devices
-        )
+        return await self._get_all_sensors_v11(device_name)
 
     def _get_friendly_name(self, key: str):
         components = key.split("_")[1:]  # The first part ist always empty
@@ -238,12 +230,13 @@ class EtaAPI:
 
     async def _get_all_sensors_v11(
         self,
-        float_dict,
-        switches_dict,
-        text_dict,
-        writable_dict,
-        chosen_devices: list[str] = None,
+        device_name: str,
     ):
+        float_dict = {}
+        switches_dict = {}
+        text_dict = {}
+        writable_dict = {}
+
         all_endpoints = await self._get_sensors_dict()
         _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
         queried_endpoints = []
@@ -255,11 +248,7 @@ class EtaAPI:
                     continue
 
                 fub = key.split("_")[1]
-                if chosen_devices and fub not in chosen_devices:
-                    _LOGGER.debug(
-                        "Skipping endpoint %s because it's not in the chosen devices",
-                        key,
-                    )
+                if fub != device_name:
                     continue
 
                 _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
@@ -312,6 +301,7 @@ class EtaAPI:
 
             except Exception:
                 _LOGGER.debug("Invalid endpoint", exc_info=True)
+        return float_dict, switches_dict, text_dict, writable_dict
 
     def _parse_switch_values(self, endpoint_info: ETAEndpoint):
         valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
@@ -324,12 +314,13 @@ class EtaAPI:
 
     async def _get_all_sensors_v12(
         self,
-        float_dict,
-        switches_dict,
-        text_dict,
-        writable_dict,
-        chosen_devices: list[str] = None,
+        device_name: str,
     ):
+        float_dict = {}
+        switches_dict = {}
+        text_dict = {}
+        writable_dict = {}
+
         all_endpoints = await self._get_sensors_dict()
         _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
         queried_endpoints = []
@@ -341,11 +332,7 @@ class EtaAPI:
                     continue
 
                 fub = key.split("_")[1]
-                if chosen_devices and fub not in chosen_devices:
-                    _LOGGER.debug(
-                        "Skipping endpoint %s because it's not in the chosen devices",
-                        key,
-                    )
+                if fub != device_name:
                     continue
 
                 _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
@@ -391,6 +378,7 @@ class EtaAPI:
 
             except Exception:
                 _LOGGER.debug("Invalid endpoint", exc_info=True)
+        return float_dict, switches_dict, text_dict, writable_dict
 
     def _is_writable(self, endpoint_info: ETAEndpoint):
         # TypedDict does not support isinstance(),

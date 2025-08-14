@@ -13,9 +13,16 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
+    FLOAT_DICT,
+    SWITCHES_DICT,
+    TEXT_DICT,
     WRITABLE_DICT,
+    CHOSEN_FLOAT_SENSORS,
+    CHOSEN_SWITCHES,
+    CHOSEN_TEXT_SENSORS,
     CHOSEN_WRITABLE_SENSORS,
     CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
+    FORCE_LEGACY_MODE,
 )
 from .api import EtaAPI, ETAError, ETAEndpoint
 
@@ -24,6 +31,96 @@ DATA_SCAN_INTERVAL = timedelta(minutes=1)
 ERROR_SCAN_INTERVAL = timedelta(minutes=2)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class EtaDataUpdateCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching data from the ETA terminal."""
+
+    def __init__(
+        self, hass: HomeAssistant, config: dict, device_name: str, entry_id: str
+    ) -> None:
+        """Initialize."""
+        self.host = config.get(CONF_HOST)
+        self.port = config.get(CONF_PORT)
+        self.session = async_get_clientsession(hass)
+        self.device_name = device_name
+        self.entry_id = entry_id
+        self.data = {}
+        self.config = config
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_{device_name}",
+            update_interval=DATA_SCAN_INTERVAL,
+        )
+
+    def _should_force_number_handling(self, unit):
+        return unit == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
+
+    async def _async_update_data(self) -> dict:
+        """Update data via library."""
+        data = {}
+        eta_client = EtaAPI(self.session, self.host, self.port)
+
+        # get all available endpoints for this device
+        if not self.data:
+            _LOGGER.info(
+                "First update for device %s, getting all endpoints", self.device_name
+            )
+            (
+                float_dict,
+                switches_dict,
+                text_dict,
+                writable_dict,
+            ) = await eta_client.get_all_sensors(
+                self.config.get(FORCE_LEGACY_MODE), self.device_name
+            )
+
+            # Store the discovered endpoints in hass.data
+            self.hass.data[DOMAIN][self.entry_id][self.device_name] = {
+                FLOAT_DICT: float_dict,
+                SWITCHES_DICT: switches_dict,
+                TEXT_DICT: text_dict,
+                WRITABLE_DICT: writable_dict,
+                CHOSEN_FLOAT_SENSORS: list(float_dict.keys()),
+                CHOSEN_SWITCHES: list(switches_dict.keys()),
+                CHOSEN_TEXT_SENSORS: list(text_dict.keys()),
+                CHOSEN_WRITABLE_SENSORS: list(writable_dict.keys()),
+            }
+            self.data = self.hass.data[DOMAIN][self.entry_id][self.device_name]
+
+        # Update the values for all chosen sensors
+        all_sensors = {
+            **self.data.get(FLOAT_DICT, {}),
+            **self.data.get(SWITCHES_DICT, {}),
+            **self.data.get(TEXT_DICT, {}),
+            **self.data.get(WRITABLE_DICT, {}),
+        }
+
+        for sensor_key, sensor_endpoint in all_sensors.items():
+            if (
+                sensor_key in self.data.get(CHOSEN_FLOAT_SENSORS, [])
+                or sensor_key in self.data.get(CHOSEN_SWITCHES, [])
+                or sensor_key in self.data.get(CHOSEN_TEXT_SENSORS, [])
+                or sensor_key in self.data.get(CHOSEN_WRITABLE_SENSORS, [])
+            ):
+                try:
+                    async with timeout(10):
+                        value, _ = await eta_client.get_data(
+                            sensor_endpoint["url"],
+                            self._should_force_number_handling(sensor_endpoint["unit"]),
+                        )
+                        data[sensor_key] = value
+                except Exception as e:
+                    _LOGGER.error(
+                        "Error updating sensor %s for device %s: %s",
+                        sensor_key,
+                        self.device_name,
+                        e,
+                    )
+
+        return data
 
 
 class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
@@ -69,50 +166,3 @@ class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
             errors = await eta_client.get_errors()
             self._handle_error_events(errors)
             return errors
-
-
-class ETAWritableUpdateCoordinator(DataUpdateCoordinator[dict]):
-    """Class to manage fetching data from the ETA terminal."""
-
-    def __init__(self, hass: HomeAssistant, config: dict) -> None:
-        """Initialize."""
-
-        self.host = config.get(CONF_HOST)
-        self.port = config.get(CONF_PORT)
-        self.session = async_get_clientsession(hass)
-        self.chosen_writable_sensors: list[str] = config.get(
-            CHOSEN_WRITABLE_SENSORS, []
-        )
-        self.all_writable_sensors: dict[str, ETAEndpoint] = config.get(
-            WRITABLE_DICT, {}
-        )
-
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=DOMAIN,
-            update_interval=DATA_SCAN_INTERVAL,
-        )
-
-    def _should_force_number_handling(self, unit):
-        return unit == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
-
-    async def _async_update_data(self) -> dict:
-        """Update data via library."""
-        data = {}
-        eta_client = EtaAPI(self.session, self.host, self.port)
-
-        for sensor in self.chosen_writable_sensors:
-            async with timeout(10):
-                value, _ = await eta_client.get_data(
-                    self.all_writable_sensors[sensor]["url"],
-                    # force the api to return the number value instead of the text value, even if the eta endpoint returns an invalid unit
-                    # This is the case for e.g. time endpoints, which have an empty unit, but we still need the number value (minutes since midnight), instead of the text value ("19:00")
-                    self._should_force_number_handling(
-                        self.all_writable_sensors[sensor]["unit"]
-                    ),
-                )
-                data[sensor] = value
-                data[sensor.removesuffix("_writable")] = value
-
-        return data
