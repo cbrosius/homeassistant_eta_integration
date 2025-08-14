@@ -8,7 +8,6 @@ from homeassistant.const import CONF_HOST, CONF_PORT, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import config_entry_flow
 
 from .const import DOMAIN, ERROR_UPDATE_COORDINATOR
 from .coordinator import ETAErrorUpdateCoordinator
@@ -36,7 +35,9 @@ async def async_setup_entry(
         device_info = create_device_info(
             config["host"], config["port"], device_name
         )
-        buttons.append(EtaDeviceConfigButton(config, hass, device_name, device_info))
+        buttons.append(
+            EtaDeviceConfigButton(config, hass, device_name, device_info, entry_id)
+        )
 
     async_add_entities(buttons)
 
@@ -90,10 +91,16 @@ class EtaDeviceConfigButton(ButtonEntity):
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
-        self, config: dict, hass: HomeAssistant, device_name: str, device_info
+        self,
+        config: dict,
+        hass: HomeAssistant,
+        device_name: str,
+        device_info,
+        entry_id: str,
     ) -> None:
         self.device_name = device_name
         self.hass = hass
+        self.entry_id = entry_id
         host = config.get(CONF_HOST)
         port = config.get(CONF_PORT)
 
@@ -109,8 +116,7 @@ class EtaDeviceConfigButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Trigger the config flow for this device."""
-        config_entry_flow.async_init(
-            self.hass,
-            DOMAIN,
+        await self.hass.config_entries.options.async_create_flow(
+            self.entry_id,
             context={"source": "user", "device": self.device_name},
         )

@@ -308,37 +308,49 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             await self.hass.config_entries.async_reload(self.config_entry.entry_id)
             return self.async_abort(reason="reauth_successful")
 
-        # aggregate data from all device coordinators
-        self.data[FLOAT_DICT] = {}
-        self.data[SWITCHES_DICT] = {}
-        self.data[TEXT_DICT] = {}
-        self.data[WRITABLE_DICT] = {}
-        self.data[CHOSEN_FLOAT_SENSORS] = []
-        self.data[CHOSEN_SWITCHES] = []
-        self.data[CHOSEN_TEXT_SENSORS] = []
-        self.data[CHOSEN_WRITABLE_SENSORS] = []
+        device_name_context = self.handler.context.get("device") if self.handler.context else None
 
-        for device_name in self.data.get("chosen_devices", []):
-            if device_name in self.hass.data[DOMAIN][self.config_entry.entry_id]:
-                device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
-                    device_name
-                ]
-                self.data[FLOAT_DICT].update(device_data.get(FLOAT_DICT, {}))
-                self.data[SWITCHES_DICT].update(device_data.get(SWITCHES_DICT, {}))
-                self.data[TEXT_DICT].update(device_data.get(TEXT_DICT, {}))
-                self.data[WRITABLE_DICT].update(device_data.get(WRITABLE_DICT, {}))
-                self.data[CHOSEN_FLOAT_SENSORS].extend(
-                    device_data.get(CHOSEN_FLOAT_SENSORS, [])
-                )
-                self.data[CHOSEN_SWITCHES].extend(
-                    device_data.get(CHOSEN_SWITCHES, [])
-                )
-                self.data[CHOSEN_TEXT_SENSORS].extend(
-                    device_data.get(CHOSEN_TEXT_SENSORS, [])
-                )
-                self.data[CHOSEN_WRITABLE_SENSORS].extend(
-                    device_data.get(CHOSEN_WRITABLE_SENSORS, [])
-                )
+        if device_name_context:
+            # If a device is specified in the context, only show entities for that device
+            self.data = self.hass.data[DOMAIN][self.config_entry.entry_id][
+                device_name_context
+            ]
+        else:
+            # aggregate data from all device coordinators
+            self.data[FLOAT_DICT] = {}
+            self.data[SWITCHES_DICT] = {}
+            self.data[TEXT_DICT] = {}
+            self.data[WRITABLE_DICT] = {}
+            self.data[CHOSEN_FLOAT_SENSORS] = []
+            self.data[CHOSEN_SWITCHES] = []
+            self.data[CHOSEN_TEXT_SENSORS] = []
+            self.data[CHOSEN_WRITABLE_SENSORS] = []
+
+            for device_name in self.data.get(CHOSEN_DEVICES, []):
+                if device_name in self.hass.data[DOMAIN][self.config_entry.entry_id]:
+                    device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
+                        device_name
+                    ]
+                    self.data[FLOAT_DICT].update(device_data.get(FLOAT_DICT, {}))
+                    self.data[SWITCHES_DICT].update(
+                        device_data.get(SWITCHES_DICT, {})
+                    )
+                    self.data[TEXT_DICT].update(device_data.get(TEXT_DICT, {}))
+                    self.data[WRITABLE_DICT].update(
+                        device_data.get(WRITABLE_DICT, {})
+                    )
+                    self.data[CHOSEN_FLOAT_SENSORS].extend(
+                        device_data.get(CHOSEN_FLOAT_SENSORS, [])
+                    )
+                    self.data[CHOSEN_SWITCHES].extend(
+                        device_data.get(CHOSEN_SWITCHES, [])
+                    )
+                    self.data[CHOSEN_TEXT_SENSORS].extend(
+                        device_data.get(CHOSEN_TEXT_SENSORS, [])
+                    )
+                    self.data[CHOSEN_WRITABLE_SENSORS].extend(
+                        device_data.get(CHOSEN_WRITABLE_SENSORS, [])
+                    )
 
         return await self.async_step_user()
 
