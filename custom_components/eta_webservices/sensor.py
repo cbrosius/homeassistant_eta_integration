@@ -39,6 +39,7 @@ from .const import (
     FLOAT_DICT,
     TEXT_DICT,
     ERROR_UPDATE_COORDINATOR,
+    DATA_UPDATE_COORDINATOR,
 )
 from .utils import create_device_info
 
