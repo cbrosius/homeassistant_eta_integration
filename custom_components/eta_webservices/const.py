@@ -17,7 +17,8 @@ FORCE_SENSOR_DETECTION = "force_sensor_detection"
 ENABLE_DEBUG_LOGGING = "enable_debug_logging"
 
 ERROR_UPDATE_COORDINATOR = "error_update_coordinator"
-WRITABLE_UPDATE_COORDINATOR = "writable_update_coordinator"
+DATA_UPDATE_COORDINATOR = "data_update_coordinator"
+CHOSEN_DEVICES = "chosen_devices"
 
 CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT = "minutes_since_midnight"
 INVISIBLE_UNITS = [CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT]

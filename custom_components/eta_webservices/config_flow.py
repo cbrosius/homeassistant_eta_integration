@@ -24,6 +24,7 @@ from .const import (
     CHOSEN_SWITCHES,
     CHOSEN_TEXT_SENSORS,
     CHOSEN_WRITABLE_SENSORS,
+    CHOSEN_DEVICES,
     FORCE_LEGACY_MODE,
     FORCE_SENSOR_DETECTION,
     ENABLE_DEBUG_LOGGING,
@@ -98,7 +99,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_select_devices(self, user_input: dict = None):
         """Second step in config flow to select devices."""
         if user_input is not None:
-            self.data["chosen_devices"] = user_input.get("chosen_devices", [])
+            self.data[CHOSEN_DEVICES] = user_input.get(CHOSEN_DEVICES, [])
             # Create a config entry without scanning for entities
             return self.async_create_entry(
                 title=f"ETA at {self.data[CONF_HOST]}",
@@ -109,7 +110,7 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="select_devices",
             data_schema=vol.Schema(
                 {
-                    vol.Required("chosen_devices"): selector.SelectSelector(
+                    vol.Required(CHOSEN_DEVICES): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
                                 selector.SelectOptionDict(value=device, label=device)
