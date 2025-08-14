@@ -42,23 +42,28 @@ async def async_setup_entry(
 ):
     """Setup sensors from a config entry created in the integrations UI."""
     entry_id = config_entry.entry_id
-    config = hass.data[DOMAIN][entry_id]["config_entry_data"]
+    config = config_entry.data
+    options = config_entry.options
     numbers = []
+
+    writable_dict = options.get(WRITABLE_DICT, {})
+    chosen_writable_sensors = options.get(CHOSEN_WRITABLE_SENSORS, [])
 
     for device_name in config.get("chosen_devices", []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            device_data = hass.data[DOMAIN][entry_id][device_name]
-            coordinator = device_data[DATA_UPDATE_COORDINATOR]
+            coordinator = hass.data[DOMAIN][entry_id][device_name][
+                DATA_UPDATE_COORDINATOR
+            ]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
 
-            for unique_id, endpoint_info in device_data.get(
-                WRITABLE_DICT, {}
-            ).items():
-                if unique_id in device_data.get(
-                    CHOSEN_WRITABLE_SENSORS, []
-                ) and endpoint_info.get("unit") not in INVISIBLE_UNITS:
+            for unique_id, endpoint_info in writable_dict.items():
+                if (
+                    unique_id in chosen_writable_sensors
+                    and f"_{device_name}_" in unique_id
+                    and endpoint_info.get("unit") not in INVISIBLE_UNITS
+                ):
                     numbers.append(
                         EtaWritableNumberSensor(
                             coordinator,

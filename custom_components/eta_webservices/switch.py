@@ -19,19 +19,24 @@ async def async_setup_entry(
 ):
     """Setup switches from a config entry created in the integrations UI."""
     entry_id = config_entry.entry_id
-    config = hass.data[DOMAIN][entry_id]["config_entry_data"]
+    config = config_entry.data
+    options = config_entry.options
     switches = []
+
+    switches_dict = options.get(SWITCHES_DICT, {})
+    chosen_switches = options.get(CHOSEN_SWITCHES, [])
 
     for device_name in config.get("chosen_devices", []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            device_data = hass.data[DOMAIN][entry_id][device_name]
-            coordinator = device_data[DATA_UPDATE_COORDINATOR]
+            coordinator = hass.data[DOMAIN][entry_id][device_name][
+                DATA_UPDATE_COORDINATOR
+            ]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
 
-            for unique_id, endpoint_info in device_data.get(SWITCHES_DICT, {}).items():
-                if unique_id in device_data.get(CHOSEN_SWITCHES, []):
+            for unique_id, endpoint_info in switches_dict.items():
+                if unique_id in chosen_switches and f"_{device_name}_" in unique_id:
                     switches.append(
                         EtaSwitch(
                             coordinator,

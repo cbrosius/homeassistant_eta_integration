@@ -53,20 +53,27 @@ async def async_setup_entry(
 ):
     """Setup sensors from a config entry created in the integrations UI."""
     entry_id = config_entry.entry_id
-    config = hass.data[DOMAIN][entry_id]["config_entry_data"]
+    config = config_entry.data
+    options = config_entry.options
     sensors = []
+
+    float_sensors = options.get(FLOAT_DICT, {})
+    chosen_float_sensors = options.get(CHOSEN_FLOAT_SENSORS, [])
+    text_sensors = options.get(TEXT_DICT, {})
+    chosen_text_sensors = options.get(CHOSEN_TEXT_SENSORS, [])
 
     for device_name in config.get("chosen_devices", []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            device_data = hass.data[DOMAIN][entry_id][device_name]
-            coordinator = device_data[DATA_UPDATE_COORDINATOR]
+            coordinator = hass.data[DOMAIN][entry_id][device_name][
+                DATA_UPDATE_COORDINATOR
+            ]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
 
             # Float sensors
-            for unique_id, endpoint_info in device_data.get(FLOAT_DICT, {}).items():
-                if unique_id in device_data.get(CHOSEN_FLOAT_SENSORS, []):
+            for unique_id, endpoint_info in float_sensors.items():
+                if unique_id in chosen_float_sensors and f"_{device_name}_" in unique_id:
                     sensors.append(
                         EtaFloatSensor(
                             coordinator,
@@ -79,8 +86,8 @@ async def async_setup_entry(
                     )
 
             # Text sensors
-            for unique_id, endpoint_info in device_data.get(TEXT_DICT, {}).items():
-                if unique_id in device_data.get(CHOSEN_TEXT_SENSORS, []):
+            for unique_id, endpoint_info in text_sensors.items():
+                if unique_id in chosen_text_sensors and f"_{device_name}_" in unique_id:
                     sensors.append(
                         EtaTextSensor(
                             coordinator,
