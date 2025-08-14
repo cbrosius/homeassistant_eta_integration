@@ -262,379 +262,112 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         self.config_entry = config_entry
         self.data = {}
         self._errors = {}
+        self.device_name = None
 
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         """Manage the options."""
-        # self.config_entry is the config entry from the config flow, but we need to get the data from the coordinator
-        self.data = self.hass.data[DOMAIN][self.config_entry.entry_id][
-            "config_entry_data"
-        ]
+        self.data = self.config_entry.data
+        self.device_name = self.handler.context.get("device") if self.handler.context else None
 
-        if self.data.get(FORCE_SENSOR_DETECTION, False):
-            _LOGGER.info("Forcing new endpoint discovery")
-            # Clear the coordinator data to force a re-scan on the next update
-            for device_name in self.data.get("chosen_devices", []):
-                if device_name in self.hass.data[DOMAIN][self.config_entry.entry_id]:
-                    coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id][
-                        device_name
-                    ][DATA_UPDATE_COORDINATOR]
-                    coordinator.data = {}
-            # Reload the config entry to apply the changes
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            return self.async_abort(reason="reauth_successful")
-
-        device_name_context = self.handler.context.get("device") if self.handler.context else None
-
-        if device_name_context:
-            return await self.async_step_select_entities_for_device(
-                device_name=device_name_context
-            )
+        if self.device_name:
+            return await self.async_step_select_entities()
         else:
-            # aggregate data from all device coordinators
-            self.data[FLOAT_DICT] = {}
-            self.data[SWITCHES_DICT] = {}
-            self.data[TEXT_DICT] = {}
-            self.data[WRITABLE_DICT] = {}
-            self.data[CHOSEN_FLOAT_SENSORS] = []
-            self.data[CHOSEN_SWITCHES] = []
-            self.data[CHOSEN_TEXT_SENSORS] = []
-            self.data[CHOSEN_WRITABLE_SENSORS] = []
+            return await self.async_step_select_device()
 
-            for device_name in self.data.get(CHOSEN_DEVICES, []):
-                if device_name in self.hass.data[DOMAIN][self.config_entry.entry_id]:
-                    device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
-                        device_name
-                    ]
-                    self.data[FLOAT_DICT].update(device_data.get(FLOAT_DICT, {}))
-                    self.data[SWITCHES_DICT].update(
-                        device_data.get(SWITCHES_DICT, {})
-                    )
-                    self.data[TEXT_DICT].update(device_data.get(TEXT_DICT, {}))
-                    self.data[WRITABLE_DICT].update(
-                        device_data.get(WRITABLE_DICT, {})
-                    )
-                    self.data[CHOSEN_FLOAT_SENSORS].extend(
-                        device_data.get(CHOSEN_FLOAT_SENSORS, [])
-                    )
-                    self.data[CHOSEN_SWITCHES].extend(
-                        device_data.get(CHOSEN_SWITCHES, [])
-                    )
-                    self.data[CHOSEN_TEXT_SENSORS].extend(
-                        device_data.get(CHOSEN_TEXT_SENSORS, [])
-                    )
-                    self.data[CHOSEN_WRITABLE_SENSORS].extend(
-                        device_data.get(CHOSEN_WRITABLE_SENSORS, [])
-                    )
+    async def async_step_select_device(self, user_input=None):
+        """Step to select a device to configure."""
+        if user_input is not None:
+            self.device_name = user_input["device"]
+            return await self.async_step_select_entities()
 
-            return await self.async_step_user()
+        devices = self.config_entry.data.get(CHOSEN_DEVICES, [])
+        return self.async_show_form(
+            step_id="select_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(value=device, label=device)
+                                for device in devices
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    ),
+                }
+            ),
+        )
 
-    async def async_step_select_entities_for_device(
-        self, user_input: dict = None, device_name: str = None
-    ):
+    async def async_step_select_entities(self, user_input=None):
         """Step to select entities for a specific device."""
         if user_input is not None:
-            session = async_get_clientsession(self.hass)
-            eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
-
-            float_dict = {}
-            switches_dict = {}
-            text_dict = {}
-            writable_dict = {}
-            chosen_float_sensors = []
-            chosen_switches = []
-            chosen_text_sensors = []
-            chosen_writable_sensors = []
-
-            for value in user_input.get("chosen_entities", []):
-                uri, path = value.split("|")
-                metadata = await eta_client.async_get_entity_metadata(uri)
-                entity_type = eta_client.classify_entity(metadata)
-
-                unique_key = f"eta_{self.data[CONF_HOST].replace('.', '_')}_{path.lower().replace(' ', '_')}"
-                metadata["friendly_name"] = " > ".join(path.split("_")[2:])
-
-                if entity_type == "sensor":
-                    float_dict[unique_key] = metadata
-                    chosen_float_sensors.append(unique_key)
-                elif entity_type == "switch":
-                    switches_dict[unique_key] = metadata
-                    chosen_switches.append(unique_key)
-                elif entity_type == "number":
-                    writable_dict[unique_key] = metadata
-                    chosen_writable_sensors.append(unique_key)
-                elif entity_type == "time":
-                    writable_dict[unique_key] = metadata
-                    chosen_writable_sensors.append(unique_key)
-
+            # Get existing options
             options = self.config_entry.options.copy()
-            options[FLOAT_DICT] = float_dict
-            options[SWITCHES_DICT] = switches_dict
-            options[TEXT_DICT] = text_dict
-            options[WRITABLE_DICT] = writable_dict
-            options[CHOSEN_FLOAT_SENSORS] = chosen_float_sensors
-            options[CHOSEN_SWITCHES] = chosen_switches
-            options[CHOSEN_TEXT_SENSORS] = chosen_text_sensors
-            options[CHOSEN_WRITABLE_SENSORS] = chosen_writable_sensors
+
+            # Get all entities for the device
+            device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
+                self.device_name
+            ]
+            all_entities = {
+                **device_data.get(FLOAT_DICT, {}),
+                **device_data.get(SWITCHES_DICT, {}),
+                **device_data.get(TEXT_DICT, {}),
+                **device_data.get(WRITABLE_DICT, {}),
+            }
+
+            # Update chosen entities for this device
+            chosen_for_device = user_input.get("chosen_entities", [])
+
+            # Helper to update a chosen list
+            def update_chosen_list(chosen_list, entity_key, entity_type, expected_type):
+                is_chosen = entity_key in chosen_for_device
+                is_in_list = entity_key in chosen_list
+
+                if is_chosen and not is_in_list and entity_type == expected_type:
+                    chosen_list.append(entity_key)
+                elif not is_chosen and is_in_list:
+                    chosen_list.remove(entity_key)
+
+            for key, entity in all_entities.items():
+                entity_type = eta_client.classify_entity(entity)
+                update_chosen_list(options[CHOSEN_FLOAT_SENSORS], key, entity_type, "sensor")
+                update_chosen_list(options[CHOSEN_SWITCHES], key, entity_type, "switch")
+                update_chosen_list(options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "number")
+                update_chosen_list(options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "time")
 
             return self.async_create_entry(title="", data=options)
 
-        # Get the entity structure for the device
-        session = async_get_clientsession(self.hass)
-        eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
-        entity_structure = await eta_client.get_entity_structure(device_name)
-
-        # Flatten the structure for the selector
-        options = []
-
-        def flatten_structure(node, path="", prefix=""):
-            name = node.get("name")
-            uri = node.get("uri")
-
-            current_path = f"{path}_{name}" if path else f"_{name}"
-            label = f"{prefix}{name}"
-
-            if uri:
-                options.append(
-                    selector.SelectOptionDict(
-                        value=f"{uri}|{current_path}", label=label
-                    )
-                )
-
-            new_prefix = f"{label} > "
-            for child in node.get("children", []):
-                flatten_structure(child, current_path, new_prefix)
-
-        if entity_structure:
-            flatten_structure(entity_structure)
+        device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
+            self.device_name
+        ]
+        all_entities = {
+            **device_data.get(FLOAT_DICT, {}),
+            **device_data.get(SWITCHES_DICT, {}),
+            **device_data.get(TEXT_DICT, {}),
+            **device_data.get(WRITABLE_DICT, {}),
+        }
 
         return self.async_show_form(
-            step_id="select_entities_for_device",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional("chosen_entities"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=options,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                            multiple=True,
-                        )
-                    ),
-                }
-            ),
-            description_placeholders={"device_name": device_name},
-        )
-
-    async def async_step_user(self, user_input=None):
-        """Manage the options."""
-        entity_registry = async_get(self.hass)
-        entries = async_entries_for_config_entry(
-            entity_registry, self.config_entry.entry_id
-        )
-
-        entity_map_sensors = {
-            e.unique_id: e for e in entries if e.unique_id in self.data[FLOAT_DICT]
-        }
-        entity_map_switches = {
-            e.unique_id: e for e in entries if e.unique_id in self.data[SWITCHES_DICT]
-        }
-        entity_map_text_sensors = {
-            e.unique_id: e for e in entries if e.unique_id in self.data[TEXT_DICT]
-        }
-        entity_map_writable_sensors = {
-            e.unique_id: e for e in entries if e.unique_id in self.data[WRITABLE_DICT]
-        }
-
-        if user_input is not None:
-            removed_entities = [
-                entity_map_sensors[entity_id]
-                for entity_id in entity_map_sensors
-                if entity_id not in user_input[CHOSEN_FLOAT_SENSORS]
-            ]
-            removed_entities.extend(
-                [
-                    entity_map_switches[entity_id]
-                    for entity_id in entity_map_switches
-                    if entity_id not in user_input[CHOSEN_SWITCHES]
-                ]
-            )
-            removed_entities.extend(
-                [
-                    entity_map_text_sensors[entity_id]
-                    for entity_id in entity_map_text_sensors
-                    if entity_id not in user_input[CHOSEN_TEXT_SENSORS]
-                ]
-            )
-            removed_entities.extend(
-                [
-                    entity_map_writable_sensors[entity_id]
-                    for entity_id in entity_map_writable_sensors
-                    if entity_id not in user_input[CHOSEN_WRITABLE_SENSORS]
-                ]
-            )
-            for e in removed_entities:
-                # Unregister from HA
-                entity_registry.async_remove(e.entity_id)
-
-            data = {
-                CHOSEN_FLOAT_SENSORS: user_input[CHOSEN_FLOAT_SENSORS],
-                CHOSEN_SWITCHES: user_input[CHOSEN_SWITCHES],
-                CHOSEN_TEXT_SENSORS: user_input[CHOSEN_TEXT_SENSORS],
-                CHOSEN_WRITABLE_SENSORS: user_input[CHOSEN_WRITABLE_SENSORS],
-                FLOAT_DICT: self.data[FLOAT_DICT],
-                SWITCHES_DICT: self.data[SWITCHES_DICT],
-                TEXT_DICT: self.data[TEXT_DICT],
-                WRITABLE_DICT: self.data[WRITABLE_DICT],
-                CONF_HOST: self.data[CONF_HOST],
-                CONF_PORT: self.data[CONF_PORT],
-            }
-
-            return self.async_create_entry(title="", data=data)
-        return await self._show_config_form_endpoint(
-            list(entity_map_sensors.keys()),
-            list(entity_map_switches.keys()),
-            list(entity_map_text_sensors.keys()),
-            list(entity_map_writable_sensors.keys()),
-        )
-
-    async def _show_config_form_endpoint(
-        self,
-        current_chosen_sensors: list[str],
-        current_chosen_switches: list[str],
-        current_chosen_text_sensors: list[str],
-        current_chosen_writable_sensors: list[str],
-    ):
-        """Show the configuration form to select which endpoints should become entities.
-        The default arguments for this function must be lists, otherwise the Selectors will crash
-        """
-
-        _LOGGER.debug("Displaying option flow endpoint selection form")
-
-        # Create shallow copies of the dicts to make sure the del operators below won't delete the original data
-        sensors_dict: dict[str, ETAEndpoint] = copy.copy(self.data[FLOAT_DICT])
-        switches_dict: dict[str, ETAEndpoint] = copy.copy(self.data[SWITCHES_DICT])
-        text_dict: dict[str, ETAEndpoint] = copy.copy(self.data[TEXT_DICT])
-        writable_dict: dict[str, ETAEndpoint] = copy.copy(self.data[WRITABLE_DICT])
-
-        session = async_get_clientsession(self.hass)
-        eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
-
-        is_correct_api_version = await eta_client.is_correct_api_version()
-        if not is_correct_api_version:
-            self._errors["base"] = "wrong_api_version"
-
-        # Update current values
-        for entity in list(sensors_dict.keys()):
-            try:
-                sensors_dict[entity]["value"], _ = await eta_client.get_data(
-                    sensors_dict[entity]["url"]
-                )
-            except Exception:
-                _LOGGER.error(
-                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
-                    sensors_dict[entity]["friendly_name"],
-                    sensors_dict[entity]["url"],
-                )
-                del sensors_dict[entity]
-                self._errors["base"] = "value_update_error"
-
-        for entity in list(switches_dict.keys()):
-            try:
-                switches_dict[entity]["value"], _ = await eta_client.get_data(
-                    switches_dict[entity]["url"]
-                )
-            except Exception:
-                _LOGGER.error(
-                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
-                    switches_dict[entity]["friendly_name"],
-                    switches_dict[entity]["url"],
-                )
-                del switches_dict[entity]
-                self._errors["base"] = "value_update_error"
-        for entity in list(text_dict.keys()):
-            try:
-                text_dict[entity]["value"], _ = await eta_client.get_data(
-                    text_dict[entity]["url"]
-                )
-            except Exception:
-                _LOGGER.error(
-                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
-                    text_dict[entity]["friendly_name"],
-                    text_dict[entity]["url"],
-                )
-                del text_dict[entity]
-                self._errors["base"] = "value_update_error"
-        for entity in list(writable_dict.keys()):
-            try:
-                writable_dict[entity]["value"], _ = await eta_client.get_data(
-                    writable_dict[entity]["url"]
-                )
-            except Exception:
-                _LOGGER.error(
-                    "Exception while updating the value for endpoint '%s' (%s), removing sensor from the lists",
-                    writable_dict[entity]["friendly_name"],
-                    writable_dict[entity]["url"],
-                )
-                del writable_dict[entity]
-                self._errors["base"] = "value_update_error"
-
-        return self.async_show_form(
-            step_id="user",
+            step_id="select_entities",
             data_schema=vol.Schema(
                 {
                     vol.Optional(
-                        CHOSEN_FLOAT_SENSORS, default=current_chosen_sensors
+                        "chosen_entities",
+                        default=[
+                            *self.config_entry.options.get(CHOSEN_FLOAT_SENSORS, []),
+                            *self.config_entry.options.get(CHOSEN_SWITCHES, []),
+                            *self.config_entry.options.get(CHOSEN_TEXT_SENSORS, []),
+                            *self.config_entry.options.get(
+                                CHOSEN_WRITABLE_SENSORS, []
+                            ),
+                        ],
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
                                 selector.SelectOptionDict(
-                                    value=key,
-                                    label=f"{sensors_dict[key]['friendly_name']} ({sensors_dict[key]['value']} {sensors_dict[key]['unit'] if sensors_dict[key]['unit'] not in INVISIBLE_UNITS else ""})",
+                                    value=key, label=entity["friendly_name"]
                                 )
-                                for key in sensors_dict
-                            ],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CHOSEN_SWITCHES, default=current_chosen_switches
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[
-                                selector.SelectOptionDict(
-                                    value=key,
-                                    label=f"{switches_dict[key]['friendly_name']} ({switches_dict[key]['value']})",
-                                )
-                                for key in switches_dict
-                            ],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CHOSEN_TEXT_SENSORS, default=current_chosen_text_sensors
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[
-                                selector.SelectOptionDict(
-                                    value=key,
-                                    label=f"{text_dict[key]['friendly_name']} ({text_dict[key]['value']})",
-                                )
-                                for key in text_dict
-                            ],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CHOSEN_WRITABLE_SENSORS, default=current_chosen_writable_sensors
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[
-                                selector.SelectOptionDict(
-                                    value=key,
-                                    label=f"{writable_dict[key]['friendly_name']} ({writable_dict[key]['value']} {writable_dict[key]['unit'] if writable_dict[key]['unit'] not in INVISIBLE_UNITS else ""})",
-                                )
-                                for key in writable_dict
+                                for key, entity in all_entities.items()
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                             multiple=True,
@@ -642,5 +375,5 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 }
             ),
-            errors=self._errors,
+            description_placeholders={"device_name": self.device_name},
         )

@@ -23,20 +23,21 @@ async def async_setup_entry(
     options = config_entry.options
     switches = []
 
-    switches_dict = options.get(SWITCHES_DICT, {})
-    chosen_switches = options.get(CHOSEN_SWITCHES, [])
-
     for device_name in config.get("chosen_devices", []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            coordinator = hass.data[DOMAIN][entry_id][device_name][
-                DATA_UPDATE_COORDINATOR
-            ]
+            device_data = hass.data[DOMAIN][entry_id][device_name]
+            coordinator = device_data["coordinator"]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
 
+            switches_dict = device_data.get(SWITCHES_DICT, {})
+            chosen_switches = options.get(
+                CHOSEN_SWITCHES, list(switches_dict.keys())
+            )
+
             for unique_id, endpoint_info in switches_dict.items():
-                if unique_id in chosen_switches and f"_{device_name}_" in unique_id:
+                if unique_id in chosen_switches:
                     switches.append(
                         EtaSwitch(
                             coordinator,

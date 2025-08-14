@@ -32,22 +32,22 @@ async def async_setup_entry(
     options = config_entry.options
     time_sensors = []
 
-    writable_dict = options.get(WRITABLE_DICT, {})
-    chosen_writable_sensors = options.get(CHOSEN_WRITABLE_SENSORS, [])
-
     for device_name in config.get("chosen_devices", []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            coordinator = hass.data[DOMAIN][entry_id][device_name][
-                DATA_UPDATE_COORDINATOR
-            ]
+            device_data = hass.data[DOMAIN][entry_id][device_name]
+            coordinator = device_data["coordinator"]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
+            )
+
+            writable_dict = device_data.get(WRITABLE_DICT, {})
+            chosen_writable_sensors = options.get(
+                CHOSEN_WRITABLE_SENSORS, list(writable_dict.keys())
             )
 
             for unique_id, endpoint_info in writable_dict.items():
                 if (
                     unique_id in chosen_writable_sensors
-                    and f"_{device_name}_" in unique_id
                     and endpoint_info.get("unit") == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
                 ):
                     time_sensors.append(

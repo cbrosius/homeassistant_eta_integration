@@ -63,22 +63,73 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
         data = {}
         eta_client = EtaAPI(self.session, self.host, self.port)
 
+        # Discover entities on the first run
+        if not self.hass.data[DOMAIN][self.entry_id].get(self.device_name):
+            _LOGGER.info(
+                "First update for device %s, getting all endpoints", self.device_name
+            )
+            entity_structure = await eta_client.get_entity_structure(self.device_name)
+
+            float_dict = {}
+            switches_dict = {}
+            text_dict = {}
+            writable_dict = {}
+
+            async def discover_entities(node, path=""):
+                name = node.get("name")
+                uri = node.get("uri")
+
+                current_path = f"{path}_{name}" if path else f"_{name}"
+
+                if uri:
+                    metadata = await eta_client.async_get_entity_metadata(uri)
+                    entity_type = eta_client.classify_entity(metadata)
+                    unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
+                    metadata["friendly_name"] = " > ".join(current_path.split("_")[2:])
+
+                    if entity_type == "sensor":
+                        float_dict[unique_key] = metadata
+                    elif entity_type == "switch":
+                        switches_dict[unique_key] = metadata
+                    elif entity_type == "number":
+                        writable_dict[unique_key] = metadata
+                    elif entity_type == "time":
+                        writable_dict[unique_key] = metadata
+
+                for child in node.get("children", []):
+                    await discover_entities(child, current_path)
+
+            if entity_structure:
+                await discover_entities(entity_structure)
+
+            self.hass.data[DOMAIN][self.entry_id][self.device_name] = {
+                "coordinator": self,
+                FLOAT_DICT: float_dict,
+                SWITCHES_DICT: switches_dict,
+                TEXT_DICT: text_dict,
+                WRITABLE_DICT: writable_dict,
+            }
+
+        device_data = self.hass.data[DOMAIN][self.entry_id][self.device_name]
         config_entry = self.hass.config_entries.async_get_entry(self.entry_id)
         options = config_entry.options
 
         all_sensors = {
-            **options.get(FLOAT_DICT, {}),
-            **options.get(SWITCHES_DICT, {}),
-            **options.get(TEXT_DICT, {}),
-            **options.get(WRITABLE_DICT, {}),
+            **device_data.get(FLOAT_DICT, {}),
+            **device_data.get(SWITCHES_DICT, {}),
+            **device_data.get(TEXT_DICT, {}),
+            **device_data.get(WRITABLE_DICT, {}),
         }
 
+        # If options are set, use them to filter sensors. Otherwise, use all.
         chosen_sensors = [
             *options.get(CHOSEN_FLOAT_SENSORS, []),
             *options.get(CHOSEN_SWITCHES, []),
             *options.get(CHOSEN_TEXT_SENSORS, []),
             *options.get(CHOSEN_WRITABLE_SENSORS, []),
         ]
+        if not chosen_sensors:
+            chosen_sensors = list(all_sensors.keys())
 
         for sensor_key in chosen_sensors:
             if sensor_key in all_sensors:
