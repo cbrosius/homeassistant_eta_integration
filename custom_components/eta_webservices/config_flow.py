@@ -247,32 +247,6 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return -1
         return 1 if does_endpoint_exist else 0
 
-    async def _get_all_sensors_from_device(
-        self, host, port, force_legacy_mode, device_name: str
-    ):
-        """Get all possible endpoints for a specific device."""
-        session = async_get_clientsession(self.hass)
-        eta_client = EtaAPI(session, host, port)
-
-        float_dict = {}
-        switches_dict = {}
-        text_dict = {}
-        writable_dict = {}
-        await eta_client.get_all_sensors(
-            force_legacy_mode,
-            float_dict,
-            switches_dict,
-            text_dict,
-            writable_dict,
-            [device_name],  # Filter by device
-        )
-
-        _LOGGER.debug(
-            f"Queried sensors for device {device_name}: Number of float sensors: {len(float_dict)}, Number of switches: {len(switches_dict)}, Number of text sensors: {len(text_dict)}, Number of writable sensors: {len(writable_dict)}"
-        )
-
-        return float_dict, switches_dict, text_dict, writable_dict
-
     async def _is_correct_api_version(self, host, port):
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, host, port)
@@ -312,10 +286,9 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
         device_name_context = self.handler.context.get("device") if self.handler.context else None
 
         if device_name_context:
-            # If a device is specified in the context, only show entities for that device
-            self.data = self.hass.data[DOMAIN][self.config_entry.entry_id][
-                device_name_context
-            ]
+            return await self.async_step_select_entities_for_device(
+                device_name=device_name_context
+            )
         else:
             # aggregate data from all device coordinators
             self.data[FLOAT_DICT] = {}
@@ -353,7 +326,102 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                         device_data.get(CHOSEN_WRITABLE_SENSORS, [])
                     )
 
-        return await self.async_step_user()
+            return await self.async_step_user()
+
+    async def async_step_select_entities_for_device(
+        self, user_input: dict = None, device_name: str = None
+    ):
+        """Step to select entities for a specific device."""
+        if user_input is not None:
+            session = async_get_clientsession(self.hass)
+            eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
+
+            float_dict = {}
+            switches_dict = {}
+            text_dict = {}
+            writable_dict = {}
+            chosen_float_sensors = []
+            chosen_switches = []
+            chosen_text_sensors = []
+            chosen_writable_sensors = []
+
+            for value in user_input.get("chosen_entities", []):
+                uri, path = value.split("|")
+                metadata = await eta_client.async_get_entity_metadata(uri)
+                entity_type = eta_client.classify_entity(metadata)
+
+                unique_key = f"eta_{self.data[CONF_HOST].replace('.', '_')}_{path.lower().replace(' ', '_')}"
+                metadata["friendly_name"] = " > ".join(path.split("_")[2:])
+
+                if entity_type == "sensor":
+                    float_dict[unique_key] = metadata
+                    chosen_float_sensors.append(unique_key)
+                elif entity_type == "switch":
+                    switches_dict[unique_key] = metadata
+                    chosen_switches.append(unique_key)
+                elif entity_type == "number":
+                    writable_dict[unique_key] = metadata
+                    chosen_writable_sensors.append(unique_key)
+                elif entity_type == "time":
+                    writable_dict[unique_key] = metadata
+                    chosen_writable_sensors.append(unique_key)
+
+            options = self.config_entry.options.copy()
+            options[FLOAT_DICT] = float_dict
+            options[SWITCHES_DICT] = switches_dict
+            options[TEXT_DICT] = text_dict
+            options[WRITABLE_DICT] = writable_dict
+            options[CHOSEN_FLOAT_SENSORS] = chosen_float_sensors
+            options[CHOSEN_SWITCHES] = chosen_switches
+            options[CHOSEN_TEXT_SENSORS] = chosen_text_sensors
+            options[CHOSEN_WRITABLE_SENSORS] = chosen_writable_sensors
+
+            return self.async_create_entry(title="", data=options)
+
+        # Get the entity structure for the device
+        session = async_get_clientsession(self.hass)
+        eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
+        entity_structure = await eta_client.get_entity_structure(device_name)
+
+        # Flatten the structure for the selector
+        options = []
+
+        def flatten_structure(node, path="", prefix=""):
+            name = node.get("name")
+            uri = node.get("uri")
+
+            current_path = f"{path}_{name}" if path else f"_{name}"
+            label = f"{prefix}{name}"
+
+            if uri:
+                options.append(
+                    selector.SelectOptionDict(
+                        value=f"{uri}|{current_path}", label=label
+                    )
+                )
+
+            new_prefix = f"{label} > "
+            for child in node.get("children", []):
+                flatten_structure(child, current_path, new_prefix)
+
+        if entity_structure:
+            flatten_structure(entity_structure)
+
+        return self.async_show_form(
+            step_id="select_entities_for_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("chosen_entities"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            multiple=True,
+                        )
+                    ),
+                }
+            ),
+            description_placeholders={"device_name": device_name},
+        )
 
     async def async_step_user(self, user_input=None):
         """Manage the options."""

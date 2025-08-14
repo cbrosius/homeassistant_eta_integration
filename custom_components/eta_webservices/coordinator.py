@@ -63,48 +63,26 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
         data = {}
         eta_client = EtaAPI(self.session, self.host, self.port)
 
-        # get all available endpoints for this device
-        if not self.data:
-            _LOGGER.info(
-                "First update for device %s, getting all endpoints", self.device_name
-            )
-            (
-                float_dict,
-                switches_dict,
-                text_dict,
-                writable_dict,
-            ) = await eta_client.get_all_sensors(
-                self.config.get(FORCE_LEGACY_MODE), self.device_name
-            )
+        config_entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        options = config_entry.options
 
-            # Store the discovered endpoints in hass.data
-            self.hass.data[DOMAIN][self.entry_id][self.device_name] = {
-                FLOAT_DICT: float_dict,
-                SWITCHES_DICT: switches_dict,
-                TEXT_DICT: text_dict,
-                WRITABLE_DICT: writable_dict,
-                CHOSEN_FLOAT_SENSORS: list(float_dict.keys()),
-                CHOSEN_SWITCHES: list(switches_dict.keys()),
-                CHOSEN_TEXT_SENSORS: list(text_dict.keys()),
-                CHOSEN_WRITABLE_SENSORS: list(writable_dict.keys()),
-            }
-            self.data = self.hass.data[DOMAIN][self.entry_id][self.device_name]
-
-        # Update the values for all chosen sensors
         all_sensors = {
-            **self.data.get(FLOAT_DICT, {}),
-            **self.data.get(SWITCHES_DICT, {}),
-            **self.data.get(TEXT_DICT, {}),
-            **self.data.get(WRITABLE_DICT, {}),
+            **options.get(FLOAT_DICT, {}),
+            **options.get(SWITCHES_DICT, {}),
+            **options.get(TEXT_DICT, {}),
+            **options.get(WRITABLE_DICT, {}),
         }
 
-        for sensor_key, sensor_endpoint in all_sensors.items():
-            if (
-                sensor_key in self.data.get(CHOSEN_FLOAT_SENSORS, [])
-                or sensor_key in self.data.get(CHOSEN_SWITCHES, [])
-                or sensor_key in self.data.get(CHOSEN_TEXT_SENSORS, [])
-                or sensor_key in self.data.get(CHOSEN_WRITABLE_SENSORS, [])
-            ):
+        chosen_sensors = [
+            *options.get(CHOSEN_FLOAT_SENSORS, []),
+            *options.get(CHOSEN_SWITCHES, []),
+            *options.get(CHOSEN_TEXT_SENSORS, []),
+            *options.get(CHOSEN_WRITABLE_SENSORS, []),
+        ]
+
+        for sensor_key in chosen_sensors:
+            if sensor_key in all_sensors:
+                sensor_endpoint = all_sensors[sensor_key]
                 try:
                     async with timeout(10):
                         value, _ = await eta_client.get_data(
