@@ -5,15 +5,10 @@ from datetime import timedelta, time
 
 _LOGGER = logging.getLogger(__name__)
 from .api import EtaAPI, ETAEndpoint
-from .coordinator import ETAWritableUpdateCoordinator
-from .entity import EtaWritableSensorEntity
-
-from homeassistant.components.time import (
-    TimeEntity,
-    ENTITY_ID_FORMAT,
-)
-
-from homeassistant.core import HomeAssistant
+from .coordinator import EtaDataUpdateCoordinator
+from .entity import EtaCoordinatorEntity
+from homeassistant.components.time import TimeEntity, ENTITY_ID_FORMAT
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant import config_entries
 from .const import (
@@ -21,10 +16,10 @@ from .const import (
     CHOSEN_WRITABLE_SENSORS,
     WRITABLE_DICT,
     CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
-    WRITABLE_UPDATE_COORDINATOR,
+    DATA_UPDATE_COORDINATOR,
+    CHOSEN_DEVICES,
 )
-
-SCAN_INTERVAL = timedelta(minutes=1)
+from .utils import create_device_info
 
 
 async def async_setup_entry(
@@ -33,69 +28,74 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup time sensors from a config entry created in the integrations UI."""
-    _LOGGER.debug("Setting up time entities.")
-    config = hass.data[DOMAIN][config_entry.entry_id]
+    entry_id = config_entry.entry_id
+    config = config_entry.data
+    options = config_entry.options
+    time_sensors = []
 
-    coordinator = config[WRITABLE_UPDATE_COORDINATOR]
+    for device_name in config.get(CHOSEN_DEVICES, []):
+        if device_name in hass.data[DOMAIN][entry_id]:
+            coordinator = hass.data[DOMAIN][entry_id][device_name]
+            device_info = create_device_info(
+                config["host"], config["port"], device_name
+            )
 
-    chosen_entities = config[CHOSEN_WRITABLE_SENSORS]
-    time_sensors = [
-        EtaTime(config, hass, entity, config[WRITABLE_DICT][entity], coordinator)
-        for entity in chosen_entities
-        if config[WRITABLE_DICT][entity]["unit"] == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
-    ]
-    _LOGGER.debug(
-        "Adding %d time entities: %s",
-        len(time_sensors),
-        [sensor._attr_unique_id for sensor in time_sensors],
-    )
+            writable_dict = coordinator.data.get(WRITABLE_DICT, {})
+            chosen_writable_sensors = options.get(
+                CHOSEN_WRITABLE_SENSORS, list(writable_dict.keys())
+            )
+
+            for unique_id, endpoint_info in writable_dict.items():
+                if (
+                    unique_id in chosen_writable_sensors
+                    and endpoint_info.get("unit") == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
+                ):
+                    time_sensors.append(
+                        EtaTime(
+                            coordinator,
+                            config,
+                            hass,
+                            unique_id,
+                            endpoint_info,
+                            device_info,
+                        )
+                    )
 
     async_add_entities(time_sensors, update_before_add=True)
 
 
-class EtaTime(TimeEntity, EtaWritableSensorEntity):
+class EtaTime(EtaCoordinatorEntity, TimeEntity):
     """Representation of a Time Sensor."""
 
     def __init__(
         self,
+        coordinator: EtaDataUpdateCoordinator,
         config: dict,
         hass: HomeAssistant,
         unique_id: str,
         endpoint_info: ETAEndpoint,
-        coordinator: ETAWritableUpdateCoordinator,
+        device_info,
     ) -> None:
-        """
-        Initialize sensor.
-
-        To show all values: http://192.168.178.75:8080/user/menu
-        """
-        _LOGGER.info("ETA Integration - init time sensor")
-
+        """Initialize sensor."""
         super().__init__(
-            coordinator, config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT
+            coordinator,
+            config,
+            hass,
+            unique_id,
+            endpoint_info,
+            ENTITY_ID_FORMAT,
+            device_info,
         )
 
-        # Extract the device name from the unique_id
-        parts = unique_id.split("_")
-        if len(parts) >= 3:
-            device_name = parts[2]
-        else:
-            device_name = "Unknown"
-            _LOGGER.warning(
-                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
-                unique_id,
-            )
-        self._attr_device_info = create_device_info(self.host, self.port, device_name)
-        # set an initial value to avoid errors. This will be overwritten by the coordinator immediately after initialization.
-        self._attr_native_value = time(hour=19)
-        self._attr_should_poll = True
-
-    def handle_data_updates(self, data: float) -> None:
-        total_minutes = int(data)
-        hours = total_minutes // 60
-        minutes = total_minutes % 60
-
-        self._attr_native_value = time(hour=hours, minute=minutes)
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        if self.unique_id in self.coordinator.data["values"]:
+            total_minutes = int(self.coordinator.data["values"][self.unique_id])
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+            self._attr_native_value = time(hour=hours, minute=minutes)
+            self.async_write_ha_state()
 
     async def async_set_value(self, value: time):
         total_minutes = value.hour * 60 + value.minute
@@ -105,4 +105,4 @@ class EtaTime(TimeEntity, EtaWritableSensorEntity):
         success = await eta_client.write_endpoint(self.uri, total_minutes)
         if not success:
             raise HomeAssistantError("Could not write value, see log for details")
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_request_refresh()

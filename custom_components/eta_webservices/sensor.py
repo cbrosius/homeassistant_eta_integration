@@ -17,8 +17,9 @@ from datetime import timedelta
 
 _LOGGER = logging.getLogger(__name__)
 from .api import ETAEndpoint, ETAError
-from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
-from .entity import EtaSensorEntity, EtaErrorEntity, EtaWritableSensorEntity
+from .coordinator import ETAErrorUpdateCoordinator
+from .entity import EtaCoordinatorEntity, EtaErrorEntity
+from .coordinator import EtaDataUpdateCoordinator
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -27,22 +28,20 @@ from homeassistant.components.sensor import (
     ENTITY_ID_FORMAT,
 )
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant import config_entries
 from homeassistant.const import EntityCategory
 from .const import (
     DOMAIN,
     CHOSEN_FLOAT_SENSORS,
     CHOSEN_TEXT_SENSORS,
-    CHOSEN_WRITABLE_SENSORS,
+    CHOSEN_DEVICES,
     FLOAT_DICT,
     TEXT_DICT,
     ERROR_UPDATE_COORDINATOR,
-    WRITABLE_UPDATE_COORDINATOR,
+    DATA_UPDATE_COORDINATOR,
 )
 from .utils import create_device_info
-
-SCAN_INTERVAL = timedelta(minutes=1)
 
 
 async def async_setup_entry(
@@ -51,51 +50,58 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup sensors from a config entry created in the integrations UI."""
-    config = hass.data[DOMAIN][config_entry.entry_id]
+    entry_id = config_entry.entry_id
+    config = config_entry.data
+    options = config_entry.options
+    sensors = []
 
-    writable_coordinator = config[WRITABLE_UPDATE_COORDINATOR]
+    for device_name in config.get(CHOSEN_DEVICES, []):
+        if device_name in hass.data[DOMAIN][entry_id]:
+            coordinator = hass.data[DOMAIN][entry_id][device_name]
+            device_info = create_device_info(
+                config["host"], config["port"], device_name
+            )
 
-    chosen_float_sensors = config[CHOSEN_FLOAT_SENSORS]
-    chosen_writable_sensors = config[CHOSEN_WRITABLE_SENSORS]
-    # sensors don't use a coordinator if they are not also selected as writable endpoints,
-    sensors = [
-        EtaFloatSensor(
-            config,
-            hass,
-            entity,
-            config[FLOAT_DICT][entity],
-        )
-        for entity in chosen_float_sensors
-        if entity + "_writable" not in chosen_writable_sensors
-    ]
-    # sensors use a coordinator if they are also selected as writable endpoints,
-    # to be able to update the value immediately if the user writes a new value
-    sensors.extend(
-        [
-            EtaFloatWritableSensor(
-                config,
-                hass,
-                entity,
-                config[FLOAT_DICT][entity],
-                writable_coordinator,
+            float_sensors = coordinator.data.get(FLOAT_DICT, {})
+            chosen_float_sensors = options.get(
+                CHOSEN_FLOAT_SENSORS, list(float_sensors.keys())
             )
-            for entity in chosen_float_sensors
-            if entity + "_writable" in chosen_writable_sensors
-        ]
-    )
-    chosen_text_sensors = config[CHOSEN_TEXT_SENSORS]
-    sensors.extend(
-        [
-            EtaTextSensor(
-                config,
-                hass,
-                entity,
-                config[TEXT_DICT][entity],
+
+            text_sensors = coordinator.data.get(TEXT_DICT, {})
+            chosen_text_sensors = options.get(
+                CHOSEN_TEXT_SENSORS, list(text_sensors.keys())
             )
-            for entity in chosen_text_sensors
-        ]
-    )
-    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
+
+            # Float sensors
+            for unique_id, endpoint_info in float_sensors.items():
+                if unique_id in chosen_float_sensors:
+                    sensors.append(
+                        EtaFloatSensor(
+                            coordinator,
+                            config,
+                            hass,
+                            unique_id,
+                            endpoint_info,
+                            device_info,
+                        )
+                    )
+
+            # Text sensors
+            for unique_id, endpoint_info in text_sensors.items():
+                if unique_id in chosen_text_sensors:
+                    sensors.append(
+                        EtaTextSensor(
+                            coordinator,
+                            config,
+                            hass,
+                            unique_id,
+                            endpoint_info,
+                            device_info,
+                        )
+                    )
+
+    # Error sensors
+    error_coordinator = hass.data[DOMAIN][entry_id][ERROR_UPDATE_COORDINATOR]
     sensors.extend(
         [
             EtaNbrErrorsSensor(config, hass, error_coordinator),
@@ -137,109 +143,72 @@ def _get_native_unit(unit):
     return unit
 
 
-class EtaFloatSensor(EtaSensorEntity[float]):
+class EtaFloatSensor(EtaCoordinatorEntity, SensorEntity):
     """Representation of a Float Sensor."""
 
     def __init__(
         self,
+        coordinator: EtaDataUpdateCoordinator,
         config: dict,
         hass: HomeAssistant,
         unique_id: str,
         endpoint_info: ETAEndpoint,
+        device_info,
     ) -> None:
-        """
-        Initialize sensor.
-
-        To show all values: http://192.168.178.75:8080/user/menu
-
-        """
-        _LOGGER.info("ETA Integration - init float sensor")
-
-        super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
-
-        # Extract the device name from the unique_id
-        parts = unique_id.split("_")
-        if len(parts) >= 3:
-            device_name = parts[2]
-        else:
-            device_name = (
-                "Unknown"  # Handle cases where the unique_id format is unexpected
-            )
-            _LOGGER.warning(
-                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
-                unique_id,
-            )
-        self._attr_device_info = create_device_info(self.host, self.port, device_name)
-
-        self._attr_device_class = _determine_device_class(endpoint_info["unit"])
-
-        self._attr_native_unit_of_measurement = _get_native_unit(endpoint_info["unit"])
-
-        if self._attr_device_class == SensorDeviceClass.ENERGY:
-            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-        else:
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-
-        self._attr_native_value = float
-
-
-class EtaFloatWritableSensor(SensorEntity, EtaWritableSensorEntity):
-    """Representation of a Float Sensor."""
-
-    def __init__(
-        self,
-        config: dict,
-        hass: HomeAssistant,
-        unique_id: str,
-        endpoint_info: ETAEndpoint,
-        coordinator: ETAWritableUpdateCoordinator,
-    ) -> None:
-        """
-        Initialize sensor.
-
-        To show all values: http://192.168.178.75:8080/user/menu
-
-        """
-        _LOGGER.info("ETA Integration - init float sensor with coordinator")
-
+        """Initialize sensor."""
         super().__init__(
-            coordinator, config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT
+            coordinator,
+            config,
+            hass,
+            unique_id,
+            endpoint_info,
+            ENTITY_ID_FORMAT,
+            device_info,
         )
-
         self._attr_device_class = _determine_device_class(endpoint_info["unit"])
-
         self._attr_native_unit_of_measurement = _get_native_unit(endpoint_info["unit"])
-
         if self._attr_device_class == SensorDeviceClass.ENERGY:
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         else:
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
-    def handle_data_updates(self, data: float) -> None:
-        self._attr_native_value = data
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        if self.unique_id in self.coordinator.data["values"]:
+            self._attr_native_value = self.coordinator.data["values"][self.unique_id]
+            self.async_write_ha_state()
 
 
-class EtaTextSensor(EtaSensorEntity[str]):
+class EtaTextSensor(EtaCoordinatorEntity, SensorEntity):
     """Representation of a Text Sensor."""
 
     def __init__(
         self,
+        coordinator: EtaDataUpdateCoordinator,
         config: dict,
         hass: HomeAssistant,
         unique_id: str,
         endpoint_info: ETAEndpoint,
+        device_info,
     ) -> None:
-        """
-        Initialize sensor.
+        """Initialize sensor."""
+        super().__init__(
+            coordinator,
+            config,
+            hass,
+            unique_id,
+            endpoint_info,
+            ENTITY_ID_FORMAT,
+            device_info,
+        )
 
-        To show all values: http://192.168.178.75:8080/user/menu
-
-        """
-        _LOGGER.info("ETA Integration - init text sensor")
-
-        super().__init__(config, hass, unique_id, endpoint_info, ENTITY_ID_FORMAT)
-
-        self._attr_native_value = ""
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        if self.unique_id in self.coordinator.data["values"]:
+            self._attr_native_value = self.coordinator.data["values"][self.unique_id]
+            self.async_write_ha_state()
 
 
 class EtaNbrErrorsSensor(SensorEntity, EtaErrorEntity):

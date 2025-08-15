@@ -102,19 +102,40 @@ class EtaAPI:
     def build_uri(self, suffix):
         return "http://" + self._host + ":" + str(self._port) + suffix
 
-    def _evaluate_xml_dict(self, xml_dict, uri_dict, prefix=""):
-        if type(xml_dict) == list:
-            for child in xml_dict:
-                self._evaluate_xml_dict(child, uri_dict, prefix)
-        else:
-            if "object" in xml_dict:
-                child = xml_dict["object"]
-                new_prefix = f"{prefix}_{xml_dict['@name']}"
-                # add parent to uri_dict and evaluate childs then
-                uri_dict[f"{prefix}_{xml_dict['@name']}"] = xml_dict["@uri"]
-                self._evaluate_xml_dict(child, uri_dict, new_prefix)
-            else:
-                uri_dict[f"{prefix}_{xml_dict['@name']}"] = xml_dict["@uri"]
+    def _parse_menu_node(self, node):
+        """Recursively parse a node from the /user/menu XML."""
+        if not isinstance(node, dict):
+            return None
+
+        entity = {
+            "name": node.get("@name"),
+            "uri": node.get("@uri"),
+            "children": [],
+        }
+
+        if "object" in node and node["object"] is not None:
+            children = node["object"]
+            if not isinstance(children, list):
+                children = [children]
+            for child_node in children:
+                child_entity = self._parse_menu_node(child_node)
+                if child_entity:
+                    entity["children"].append(child_entity)
+
+        return entity
+
+    async def get_entity_structure(self, device_name: str):
+        """Get the hierarchical structure of entities for a specific device."""
+        menu = await self.get_menu()
+        fubs = menu.get("eta", {}).get("menu", {}).get("fub", [])
+        if not isinstance(fubs, list):
+            fubs = [fubs]
+
+        for fub in fubs:
+            if fub.get("@name") == device_name:
+                return self._parse_menu_node(fub)
+
+        return None
 
     async def _get_request(self, suffix):
         data = await self._session.get(self.build_uri(suffix))
@@ -171,42 +192,66 @@ class EtaAPI:
         text = await data.text()
         return xmltodict.parse(text)
 
-    async def _get_raw_sensor_dict(self):
-        data = await self.get_menu()
-        raw_dict = data["eta"]["menu"]["fub"]
-        return raw_dict
+    async def async_get_entity_metadata(self, uri: str) -> dict:
+        """Get detailed metadata for a single entity URI."""
+        if await self.is_correct_api_version():
+            return await self._get_entity_metadata_v12(uri)
+        else:
+            return await self._get_entity_metadata_v11(uri)
 
-    async def _get_sensors_dict(self):
-        raw_dict = await self._get_raw_sensor_dict()
-        uri_dict = {}
-        self._evaluate_xml_dict(raw_dict, uri_dict)
-        return uri_dict
-
-    async def get_all_sensors(
-        self,
-        force_legacy_mode,
-        float_dict,
-        switches_dict,
-        text_dict,
-        writable_dict,
-        chosen_devices: list[str] = None,
-    ):
-        if not force_legacy_mode and await self.is_correct_api_version():
-            _LOGGER.debug("Get all sensors - API v1.2")
-            # New version with varinfo endpoint detected
-            return await self._get_all_sensors_v12(
-                float_dict, switches_dict, text_dict, writable_dict, chosen_devices
-            )
-
-        _LOGGER.debug("Get all sensors - API v1.1")
-        # varinfo not available -> fall back to compatibility mode
-        return await self._get_all_sensors_v11(
-            float_dict, switches_dict, text_dict, writable_dict, chosen_devices
+    async def _get_entity_metadata_v11(self, uri: str) -> dict:
+        """Get metadata for a single entity on API v1.1."""
+        value, unit, raw_dict = await self._get_data_plus_raw(uri)
+        endpoint_info = ETAEndpoint(
+            url=uri,
+            valid_values=None,
+            friendly_name="",  # This will be populated from the menu structure
+            unit=unit,
+            endpoint_type="TEXT",  # Fallback
+            value=value,
         )
 
-    def _get_friendly_name(self, key: str):
-        components = key.split("_")[1:]  # The first part ist always empty
-        return " > ".join(components)
+        if self._is_writable_v11(endpoint_info):
+            self._parse_valid_writable_values_v11(endpoint_info, raw_dict)
+
+        if self._is_switch_v11(endpoint_info, raw_dict["#text"]):
+            self._parse_switch_values_v11(endpoint_info)
+
+        return endpoint_info
+
+    async def _get_entity_metadata_v12(self, uri: str) -> dict:
+        """Get metadata for a single entity on API v1.2."""
+        endpoint_info = await self._get_varinfo(None, uri)  # fub is not needed here
+        if endpoint_info is None:
+            return None
+        value, _ = await self.get_data(uri)
+        endpoint_info["value"] = value
+
+        if self._is_switch(endpoint_info):
+            self._parse_switch_values(endpoint_info)
+
+        return endpoint_info
+
+    def classify_entity(self, endpoint_info: ETAEndpoint) -> str | None:
+        """Classify an entity based on its metadata."""
+        _LOGGER.debug("Classifying entity: %s", endpoint_info)
+        entity_type = None
+        if self._is_writable(endpoint_info) or self._is_writable_v11(endpoint_info):
+            if endpoint_info.get("unit") == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT:
+                entity_type = "time"
+            else:
+                entity_type = "number"
+        elif self._is_switch(endpoint_info) or self._is_switch_v11(
+            endpoint_info, str(endpoint_info.get("value"))
+        ):
+            entity_type = "switch"
+        elif self._is_float_sensor(endpoint_info):
+            entity_type = "sensor"
+        elif self._is_text_sensor(endpoint_info):
+            entity_type = "sensor"
+
+        _LOGGER.debug("Classified as: %s", entity_type)
+        return entity_type
 
     def _is_switch_v11(self, endpoint_info: ETAEndpoint, raw_value: str):
         if endpoint_info["unit"] == "" and raw_value in ("1802", "1803"):
@@ -219,8 +264,6 @@ class EtaAPI:
         )
 
     def _is_writable_v11(self, endpoint_info: ETAEndpoint):
-        # API v1.1 lacks the necessary function to query detailed info about the endpoint
-        # that's why we just check the unit to see if it is in the list of acceptable writable sensor units
         if endpoint_info["unit"] in self._writable_sensor_units:
             return True
         return False
@@ -228,90 +271,11 @@ class EtaAPI:
     def _parse_valid_writable_values_v11(
         self, endpoint_info: ETAEndpoint, raw_dict: dict
     ):
-        # API v1.1 lacks the necessary function to query detailed info about the endpoint
-        # that's why we have to assume sensible valid ranges for the endpoints based on their unit
         endpoint_info["valid_values"] = self._default_valid_writable_values[
             endpoint_info["unit"]
         ]
         endpoint_info["valid_values"]["dec_places"] = int(raw_dict["@decPlaces"])
         endpoint_info["valid_values"]["scale_factor"] = int(raw_dict["@scaleFactor"])
-
-    async def _get_all_sensors_v11(
-        self,
-        float_dict,
-        switches_dict,
-        text_dict,
-        writable_dict,
-        chosen_devices: list[str] = None,
-    ):
-        all_endpoints = await self._get_sensors_dict()
-        _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
-        queried_endpoints = []
-        for key in all_endpoints:
-            try:
-                if all_endpoints[key] in queried_endpoints:
-                    _LOGGER.debug("Skipping duplicate endpoint %s", all_endpoints[key])
-                    # ignore duplicate endpoints
-                    continue
-
-                fub = key.split("_")[1]
-                if chosen_devices and fub not in chosen_devices:
-                    _LOGGER.debug(
-                        "Skipping endpoint %s because it's not in the chosen devices",
-                        key,
-                    )
-                    continue
-
-                _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
-
-                queried_endpoints.append(all_endpoints[key])
-
-                value, unit, raw_dict = await self._get_data_plus_raw(
-                    all_endpoints[key]
-                )
-
-                endpoint_info = ETAEndpoint(
-                    url=all_endpoints[key],
-                    valid_values=None,
-                    friendly_name=self._get_friendly_name(key),
-                    unit=unit,
-                    # Fallback: declare all endpoints as text sensors.
-                    # If the unit is in the list of known units, the sensor will be detected as a float sensor anyway.
-                    endpoint_type="TEXT",
-                    value=value,
-                )
-
-                unique_key = (
-                    "eta_"
-                    + self._host.replace(".", "_")
-                    + "_"
-                    + key.lower().replace(" ", "_")
-                )
-
-                if self._is_writable_v11(endpoint_info):
-                    _LOGGER.debug("Adding as writable sensor")
-                    # this is checked separately because all writable sensors are registered as both a sensor entity and a number entity
-                    # add a suffix to the unique id to make sure it is still unique in case the sensor is selected in the writable list and in the sensor list
-                    self._parse_valid_writable_values_v11(endpoint_info, raw_dict)
-                    writable_dict[unique_key + "_writable"] = endpoint_info
-
-                if self._is_float_sensor(endpoint_info):
-                    _LOGGER.debug("Adding as float sensor")
-                    float_dict[unique_key] = endpoint_info
-                elif self._is_switch_v11(endpoint_info, raw_dict["#text"]):
-                    _LOGGER.debug("Adding as switch")
-                    self._parse_switch_values_v11(endpoint_info)
-                    switches_dict[unique_key] = endpoint_info
-                elif self._is_text_sensor(endpoint_info) and value != "":
-                    _LOGGER.debug("Adding as text sensor")
-                    # Ignore enpoints with an empty value
-                    # This has to be the last branch for the above fallback to work
-                    text_dict[unique_key] = endpoint_info
-                else:
-                    _LOGGER.debug("Not adding endpoint: Unknown type")
-
-            except Exception:
-                _LOGGER.debug("Invalid endpoint", exc_info=True)
 
     def _parse_switch_values(self, endpoint_info: ETAEndpoint):
         valid_values = ETAValidSwitchValues(on_value=0, off_value=0)
@@ -322,80 +286,7 @@ class EtaAPI:
                 valid_values["off_value"] = endpoint_info["valid_values"][key]
         endpoint_info["valid_values"] = valid_values
 
-    async def _get_all_sensors_v12(
-        self,
-        float_dict,
-        switches_dict,
-        text_dict,
-        writable_dict,
-        chosen_devices: list[str] = None,
-    ):
-        all_endpoints = await self._get_sensors_dict()
-        _LOGGER.debug("Got list of all endpoints: %s", all_endpoints)
-        queried_endpoints = []
-        for key in all_endpoints:
-            try:
-                if all_endpoints[key] in queried_endpoints:
-                    _LOGGER.debug("Skipping duplicate endpoint %s", all_endpoints[key])
-                    # ignore duplicate endpoints
-                    continue
-
-                fub = key.split("_")[1]
-                if chosen_devices and fub not in chosen_devices:
-                    _LOGGER.debug(
-                        "Skipping endpoint %s because it's not in the chosen devices",
-                        key,
-                    )
-                    continue
-
-                _LOGGER.debug("Querying endpoint %s", all_endpoints[key])
-
-                queried_endpoints.append(all_endpoints[key])
-
-                fub = key.split("_")[1]
-                endpoint_info = await self._get_varinfo(fub, all_endpoints[key])
-
-                unique_key = (
-                    "eta_"
-                    + self._host.replace(".", "_")
-                    + "_"
-                    + key.lower().replace(" ", "_")
-                )
-
-                if (
-                    self._is_float_sensor(endpoint_info)
-                    or self._is_switch(endpoint_info)
-                    or self._is_text_sensor(endpoint_info)
-                ):
-                    value, _ = await self.get_data(all_endpoints[key])
-                    endpoint_info["value"] = value
-
-                if self._is_writable(endpoint_info):
-                    _LOGGER.debug("Adding as writable sensor")
-                    # this is checked separately because all writable sensors are registered as both a sensor entity and a number entity
-                    # add a suffix to the unique id to make sure it is still unique in case the sensor is selected in the writable list and in the sensor list
-                    writable_dict[unique_key + "_writable"] = endpoint_info
-
-                if self._is_float_sensor(endpoint_info):
-                    _LOGGER.debug("Adding as float sensor")
-                    float_dict[unique_key] = endpoint_info
-                elif self._is_switch(endpoint_info):
-                    _LOGGER.debug("Adding as switch")
-                    self._parse_switch_values(endpoint_info)
-                    switches_dict[unique_key] = endpoint_info
-                elif self._is_text_sensor(endpoint_info):
-                    _LOGGER.debug("Adding as text sensor")
-                    text_dict[unique_key] = endpoint_info
-                else:
-                    _LOGGER.debug("Not adding endpoint: Unknown type")
-
-            except Exception:
-                _LOGGER.debug("Invalid endpoint", exc_info=True)
-
     def _is_writable(self, endpoint_info: ETAEndpoint):
-        # TypedDict does not support isinstance(),
-        # so we have to manually check if we hace the correct dict type
-        # based on the presence of a known key
         return (
             endpoint_info["valid_values"] is not None
             and "scaled_min_value" in endpoint_info["valid_values"]
@@ -436,8 +327,6 @@ class EtaAPI:
                 min_value = int(data["validValues"]["min"]["#text"])
                 max_value = int(data["validValues"]["max"]["#text"])
                 if min_value == 0 and max_value == 24 * 60 - 1:
-                    # time endpoints have a min value of 0 and max value of 1439
-                    # it may be better to parse the strValue and check if it is in the format "00:00"
                     unit = CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
         return unit
 
@@ -451,6 +340,8 @@ class EtaAPI:
             and "value" in data["validValues"]
         ):
             values = data["validValues"]["value"]
+            if not isinstance(values, list):
+                values = [values]
             valid_values = dict(
                 zip(
                     [k["@strValue"] for k in values],
@@ -489,20 +380,16 @@ class EtaAPI:
     async def _get_varinfo(self, fub, uri):
         data = await self._get_request("/user/varinfo/" + str(uri))
         text = await data.text()
-        data = xmltodict.parse(text)["eta"]["varInfo"]["variable"]
+        parsed_xml = xmltodict.parse(text)
+        if "eta" not in parsed_xml or "varInfo" not in parsed_xml["eta"]:
+            _LOGGER.debug(f"URI {uri} does not seem to be a valid variable, skipping.")
+            return None
+        data = parsed_xml["eta"]["varInfo"]["variable"]
         endpoint_info = self._parse_varinfo(data)
         endpoint_info["url"] = uri
-        endpoint_info["friendly_name"] = f"{fub} > {endpoint_info['friendly_name']}"
+        if fub:
+            endpoint_info["friendly_name"] = f"{fub} > {endpoint_info['friendly_name']}"
         return endpoint_info
-
-    def _parse_switch_state(self, data):
-        return int(data["#text"])
-
-    async def get_switch_state(self, uri):
-        data = await self._get_request("/user/var/" + str(uri))
-        text = await data.text()
-        data = xmltodict.parse(text)["eta"]["value"]
-        return self._parse_switch_state(data)
 
     async def set_switch_state(self, uri, state):
         payload = {"value": state}

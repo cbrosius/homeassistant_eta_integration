@@ -13,9 +13,17 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
+    FLOAT_DICT,
+    SWITCHES_DICT,
+    TEXT_DICT,
     WRITABLE_DICT,
+    CHOSEN_FLOAT_SENSORS,
+    CHOSEN_SWITCHES,
+    CHOSEN_TEXT_SENSORS,
     CHOSEN_WRITABLE_SENSORS,
     CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
+    FORCE_LEGACY_MODE,
+    DATA_UPDATE_COORDINATOR,
 )
 from .api import EtaAPI, ETAError, ETAEndpoint
 
@@ -24,6 +32,131 @@ DATA_SCAN_INTERVAL = timedelta(minutes=1)
 ERROR_SCAN_INTERVAL = timedelta(minutes=2)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class EtaDataUpdateCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching data from the ETA terminal."""
+
+    def __init__(
+        self, hass: HomeAssistant, config: dict, device_name: str, entry_id: str
+    ) -> None:
+        """Initialize."""
+        self.host = config.get(CONF_HOST)
+        self.port = config.get(CONF_PORT)
+        self.session = async_get_clientsession(hass)
+        self.device_name = device_name
+        self.entry_id = entry_id
+        self.config = config
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_{device_name}",
+            update_interval=DATA_SCAN_INTERVAL,
+        )
+
+    def _should_force_number_handling(self, unit):
+        return unit == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
+
+    async def _async_update_data(self) -> dict:
+        """Update data via library."""
+
+        # Discover entities on the first run
+        if not self.data:
+            _LOGGER.info(
+                "First update for device %s, getting all endpoints", self.device_name
+            )
+            eta_client = EtaAPI(self.session, self.host, self.port)
+            entity_structure = await eta_client.get_entity_structure(self.device_name)
+
+            float_dict = {}
+            switches_dict = {}
+            text_dict = {}
+            writable_dict = {}
+
+            async def discover_entities(node, path=""):
+                name = node.get("name")
+                uri = node.get("uri")
+
+                current_path = f"{path}_{name}" if path else f"_{name}"
+
+                if uri and not node.get("children"):
+                    metadata = await eta_client.async_get_entity_metadata(uri)
+                    if metadata:
+                        entity_type = eta_client.classify_entity(metadata)
+                        unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
+                        metadata["friendly_name"] = " > ".join(
+                            current_path.split("_")[2:]
+                        )
+
+                        if entity_type == "sensor":
+                            if metadata.get("unit") == "":
+                                text_dict[unique_key] = metadata
+                            else:
+                                float_dict[unique_key] = metadata
+                        elif entity_type == "switch":
+                            switches_dict[unique_key] = metadata
+                        elif entity_type == "number":
+                            writable_dict[unique_key] = metadata
+                        elif entity_type == "time":
+                            writable_dict[unique_key] = metadata
+
+                for child in node.get("children", []):
+                    await discover_entities(child, current_path)
+
+            if entity_structure:
+                await discover_entities(entity_structure)
+
+            # The coordinator's data will now hold everything
+            self.data = {
+                FLOAT_DICT: float_dict,
+                SWITCHES_DICT: switches_dict,
+                TEXT_DICT: text_dict,
+                WRITABLE_DICT: writable_dict,
+                "values": {}, # To store the entity values
+            }
+
+        # Update the values for all chosen sensors
+        eta_client = EtaAPI(self.session, self.host, self.port)
+        config_entry = self.hass.config_entries.async_get_entry(self.entry_id)
+        options = config_entry.options
+
+        all_sensors = {
+            **self.data.get(FLOAT_DICT, {}),
+            **self.data.get(SWITCHES_DICT, {}),
+            **self.data.get(TEXT_DICT, {}),
+            **self.data.get(WRITABLE_DICT, {}),
+        }
+
+        # If options are not set, update all discovered sensors
+        chosen_sensors_keys = [
+            *options.get(CHOSEN_FLOAT_SENSORS, list(self.data.get(FLOAT_DICT, {}).keys())),
+            *options.get(CHOSEN_SWITCHES, list(self.data.get(SWITCHES_DICT, {}).keys())),
+            *options.get(CHOSEN_TEXT_SENSORS, list(self.data.get(TEXT_DICT, {}).keys())),
+            *options.get(CHOSEN_WRITABLE_SENSORS, list(self.data.get(WRITABLE_DICT, {}).keys())),
+        ]
+
+        updated_values = {}
+        for sensor_key in chosen_sensors_keys:
+            if sensor_key in all_sensors:
+                sensor_endpoint = all_sensors[sensor_key]
+                try:
+                    async with timeout(10):
+                        value, _ = await eta_client.get_data(
+                            sensor_endpoint["url"],
+                            self._should_force_number_handling(sensor_endpoint["unit"]),
+                        )
+                        updated_values[sensor_key] = value
+                except Exception as e:
+                    _LOGGER.error(
+                        "Error updating sensor %s for device %s: %s",
+                        sensor_key,
+                        self.device_name,
+                        e,
+                    )
+
+        # Return a new data object with updated values
+        return {**self.data, "values": updated_values}
 
 
 class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
@@ -69,50 +202,3 @@ class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
             errors = await eta_client.get_errors()
             self._handle_error_events(errors)
             return errors
-
-
-class ETAWritableUpdateCoordinator(DataUpdateCoordinator[dict]):
-    """Class to manage fetching data from the ETA terminal."""
-
-    def __init__(self, hass: HomeAssistant, config: dict) -> None:
-        """Initialize."""
-
-        self.host = config.get(CONF_HOST)
-        self.port = config.get(CONF_PORT)
-        self.session = async_get_clientsession(hass)
-        self.chosen_writable_sensors: list[str] = config.get(
-            CHOSEN_WRITABLE_SENSORS, []
-        )
-        self.all_writable_sensors: dict[str, ETAEndpoint] = config.get(
-            WRITABLE_DICT, {}
-        )
-
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=DOMAIN,
-            update_interval=DATA_SCAN_INTERVAL,
-        )
-
-    def _should_force_number_handling(self, unit):
-        return unit == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
-
-    async def _async_update_data(self) -> dict:
-        """Update data via library."""
-        data = {}
-        eta_client = EtaAPI(self.session, self.host, self.port)
-
-        for sensor in self.chosen_writable_sensors:
-            async with timeout(10):
-                value, _ = await eta_client.get_data(
-                    self.all_writable_sensors[sensor]["url"],
-                    # force the api to return the number value instead of the text value, even if the eta endpoint returns an invalid unit
-                    # This is the case for e.g. time endpoints, which have an empty unit, but we still need the number value (minutes since midnight), instead of the text value ("19:00")
-                    self._should_force_number_handling(
-                        self.all_writable_sensors[sensor]["unit"]
-                    ),
-                )
-                data[sensor] = value
-                data[sensor.removesuffix("_writable")] = value
-
-        return data

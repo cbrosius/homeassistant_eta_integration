@@ -2,12 +2,11 @@ import logging
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 
-from .const import DOMAIN, ERROR_UPDATE_COORDINATOR, WRITABLE_UPDATE_COORDINATOR
-from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
+from .const import DOMAIN, ERROR_UPDATE_COORDINATOR, DATA_UPDATE_COORDINATOR
+from .coordinator import ETAErrorUpdateCoordinator, EtaDataUpdateCoordinator
 from .services import async_setup_services
 from .const import (
-    WRITABLE_DICT,
-    CHOSEN_WRITABLE_SENSORS,
+    CHOSEN_DEVICES,
     FORCE_LEGACY_MODE,
     FORCE_SENSOR_DETECTION,
 )
@@ -39,21 +38,24 @@ async def async_setup_entry(
         config.update(entry.options)
 
     error_coordinator = ETAErrorUpdateCoordinator(hass, config)
-    writable_coordinator = ETAWritableUpdateCoordinator(hass, config)
-    config[ERROR_UPDATE_COORDINATOR] = error_coordinator
-    config[WRITABLE_UPDATE_COORDINATOR] = writable_coordinator
-
     await error_coordinator.async_config_entry_first_refresh()
-    await writable_coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = config
+    hass.data[DOMAIN][entry.entry_id] = {
+        ERROR_UPDATE_COORDINATOR: error_coordinator,
+        "config_entry_data": config,
+    }
 
-    if not config.get("no_devices_selected"):
-        # Forward the setup to the sensor platform.
-        _LOGGER.debug("Forwarding entry setup to platforms: %s", PLATFORMS)
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    chosen_devices = config.get(CHOSEN_DEVICES, [])
+    for device in chosen_devices:
+        coordinator = EtaDataUpdateCoordinator(hass, config, device, entry.entry_id)
+        hass.data[DOMAIN][entry.entry_id][device] = coordinator
+        await coordinator.async_config_entry_first_refresh()
 
-        await async_setup_services(hass, entry)
+    # Forward the setup to the sensor platform.
+    _LOGGER.debug("Forwarding entry setup to platforms: %s", PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    await async_setup_services(hass, entry)
 
     return True
 
@@ -103,7 +105,9 @@ async def async_unload_entry(
 
     if unload_ok:
         # Remove options_update_listener.
-        hass.data[DOMAIN][entry.entry_id]["unsub_options_update_listener"]()
+        hass.data[DOMAIN][entry.entry_id]["config_entry_data"][
+            "unsub_options_update_listener"
+        ]()
 
         # Remove config entry from domain.
         hass.data[DOMAIN].pop(entry.entry_id)

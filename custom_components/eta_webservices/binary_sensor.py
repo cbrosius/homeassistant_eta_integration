@@ -26,9 +26,9 @@ async def async_setup_entry(
     async_add_entities,
 ):
     """Setup error sensor"""
-    config = hass.data[DOMAIN][config_entry.entry_id]
+    config = hass.data[DOMAIN][config_entry.entry_id]["config_entry_data"]
 
-    error_coordinator = config[ERROR_UPDATE_COORDINATOR]
+    error_coordinator = hass.data[DOMAIN][config_entry.entry_id][ERROR_UPDATE_COORDINATOR]
 
     sensors = [EtaErrorSensor(config, hass, error_coordinator)]
     async_add_entities(sensors, update_before_add=True)
@@ -65,18 +65,6 @@ class EtaErrorSensor(BinarySensorEntity, EtaErrorEntity):
             ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
         )
 
-        # Extract device name from unique_id
-        parts = self._attr_unique_id.split("_")
-        if len(parts) >= 3:
-            device_name = parts[2]
-        else:
-            device_name = "Unknown"
-            _LOGGER.warning(
-                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
-                self._attr_unique_id,
-            )
-
-        self._attr_device_info = create_device_info(host, port, device_name)
 
     def handle_data_updates(self, data: list):
         self._attr_is_on = len(data) > 0

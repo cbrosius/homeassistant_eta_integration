@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import Entity, generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import ETAEndpoint, EtaAPI
-from .coordinator import ETAErrorUpdateCoordinator, ETAWritableUpdateCoordinator
+from .coordinator import ETAErrorUpdateCoordinator, EtaDataUpdateCoordinator
 from .utils import create_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,62 +33,35 @@ class EtaEntity(Entity):
         self.port = config.get(CONF_PORT)
         self.uri = endpoint_info["url"]
 
-        # Extract device name from unique_id
-        parts = unique_id.split("_")
-        if len(parts) >= 3:
-            device_name = parts[2]
-        else:
-            device_name = "Unknown"
-            _LOGGER.warning(
-                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
-                unique_id,
-            )
-
-        self._attr_device_info = create_device_info(self.host, self.port, device_name)
         self.entity_id = generate_entity_id(entity_id_format, unique_id, hass=hass)
         self._attr_unique_id = unique_id
 
 
-class EtaSensorEntity(SensorEntity, EtaEntity, Generic[_EntityT]):
-    async def async_update(self):
-        """Fetch new state data for the sensor.
-        This is the only method that should fetch new data for Home Assistant.
-        readme: activate first: https://www.meineta.at/javax.faces.resource/downloads/ETA-RESTful-v1.2.pdf.xhtml?ln=default&v=0
-        """
-        eta_client = EtaAPI(self.session, self.host, self.port)
-        value, _ = await eta_client.get_data(self.uri)
-        self._attr_native_value = cast(_EntityT, value)
+class EtaCoordinatorEntity(CoordinatorEntity, EtaEntity):
+    """Base class for ETA entities that use a coordinator."""
 
-
-class EtaWritableSensorEntity(
-    EtaEntity, CoordinatorEntity[ETAWritableUpdateCoordinator]
-):
     def __init__(
         self,
-        coordinator: ETAWritableUpdateCoordinator,
+        coordinator: EtaDataUpdateCoordinator,
         config: dict,
         hass: HomeAssistant,
         unique_id: str,
         endpoint_info: ETAEndpoint,
         entity_id_format: str,
-    ) -> None:
+        device_info,
+    ):
         EtaEntity.__init__(
             self, config, hass, unique_id, endpoint_info, entity_id_format
         )
         CoordinatorEntity.__init__(self, coordinator)
-
-        self.handle_data_updates(float(coordinator.data[self.unique_id]))
-
-    @abstractmethod
-    def handle_data_updates(self, data: float) -> None:
-        raise NotImplementedError
+        self._attr_device_info = device_info
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Update attributes when the coordinator updates."""
-        data = self.coordinator.data[self.unique_id]
-        self.handle_data_updates(float(data))
-        super()._handle_coordinator_update()
+        if self.unique_id in self.coordinator.data:
+            self._attr_native_value = self.coordinator.data[self.unique_id]
+            self.async_write_ha_state()
 
 
 class EtaErrorEntity(CoordinatorEntity[ETAErrorUpdateCoordinator]):
@@ -113,16 +86,7 @@ class EtaErrorEntity(CoordinatorEntity[ETAErrorUpdateCoordinator]):
             entity_id_format, self._attr_unique_id, hass=hass
         )
 
-        # Extract device name from unique_id
-        parts = self._attr_unique_id.split("_")
-        device_name = parts[2] if len(parts) >= 3 else "Unknown"
-        if device_name == "Unknown":
-            _LOGGER.warning(
-                "Could not extract device name from unique_id '%s'. Using 'Unknown' as device name.",
-                self._attr_unique_id,
-            )
-
-        self._attr_device_info = create_device_info(host, port, device_name)
+        self._attr_device_info = create_device_info(host, port)
 
     @abstractmethod
     def handle_data_updates(self, data) -> None:
