@@ -83,18 +83,21 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 if uri:
                     metadata = await eta_client.async_get_entity_metadata(uri)
-                    entity_type = eta_client.classify_entity(metadata)
-                    unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
-                    metadata["friendly_name"] = " > ".join(current_path.split("_")[2:])
+                    if metadata:
+                        entity_type = eta_client.classify_entity(metadata)
+                        unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
+                        metadata["friendly_name"] = " > ".join(
+                            current_path.split("_")[2:]
+                        )
 
-                    if entity_type == "sensor":
-                        float_dict[unique_key] = metadata
-                    elif entity_type == "switch":
-                        switches_dict[unique_key] = metadata
-                    elif entity_type == "number":
-                        writable_dict[unique_key] = metadata
-                    elif entity_type == "time":
-                        writable_dict[unique_key] = metadata
+                        if entity_type == "sensor":
+                            float_dict[unique_key] = metadata
+                        elif entity_type == "switch":
+                            switches_dict[unique_key] = metadata
+                        elif entity_type == "number":
+                            writable_dict[unique_key] = metadata
+                        elif entity_type == "time":
+                            writable_dict[unique_key] = metadata
 
                 for child in node.get("children", []):
                     await discover_entities(child, current_path)

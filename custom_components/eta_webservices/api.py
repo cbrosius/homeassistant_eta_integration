@@ -222,6 +222,8 @@ class EtaAPI:
     async def _get_entity_metadata_v12(self, uri: str) -> dict:
         """Get metadata for a single entity on API v1.2."""
         endpoint_info = await self._get_varinfo(None, uri)  # fub is not needed here
+        if endpoint_info is None:
+            return None
         value, _ = await self.get_data(uri)
         endpoint_info["value"] = value
 
@@ -372,7 +374,11 @@ class EtaAPI:
     async def _get_varinfo(self, fub, uri):
         data = await self._get_request("/user/varinfo/" + str(uri))
         text = await data.text()
-        data = xmltodict.parse(text)["eta"]["varInfo"]["variable"]
+        parsed_xml = xmltodict.parse(text)
+        if "eta" not in parsed_xml or "varInfo" not in parsed_xml["eta"]:
+            _LOGGER.debug(f"URI {uri} does not seem to be a valid variable, skipping.")
+            return None
+        data = parsed_xml["eta"]["varInfo"]["variable"]
         endpoint_info = self._parse_varinfo(data)
         endpoint_info["url"] = uri
         if fub:
