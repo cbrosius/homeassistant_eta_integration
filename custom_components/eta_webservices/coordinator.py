@@ -86,7 +86,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                         entity_type = eta_client.classify_entity(metadata)
                         unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
                         metadata["friendly_name"] = " > ".join(
-                            current_path.split("_")[1:]
+                            current_path.split("_")[2:]
                         )
 
                         if entity_type == "sensor":
