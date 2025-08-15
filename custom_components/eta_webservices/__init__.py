@@ -48,10 +48,8 @@ async def async_setup_entry(
     chosen_devices = config.get(CHOSEN_DEVICES, [])
     for device in chosen_devices:
         coordinator = EtaDataUpdateCoordinator(hass, config, device, entry.entry_id)
+        hass.data[DOMAIN][entry.entry_id][device] = coordinator
         await coordinator.async_config_entry_first_refresh()
-        hass.data[DOMAIN][entry.entry_id][device] = {
-            DATA_UPDATE_COORDINATOR: coordinator
-        }
 
     # Forward the setup to the sensor platform.
     _LOGGER.debug("Forwarding entry setup to platforms: %s", PLATFORMS)

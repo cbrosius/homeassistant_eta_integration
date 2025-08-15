@@ -49,19 +49,15 @@ async def async_setup_entry(
 
     for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            _LOGGER.debug("Setting up number platform for device: %s", device_name)
-            device_data = hass.data[DOMAIN][entry_id][device_name]
-            coordinator = device_data[DATA_UPDATE_COORDINATOR]
+            coordinator = hass.data[DOMAIN][entry_id][device_name]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
 
-            writable_dict = device_data.get(WRITABLE_DICT, {})
-            _LOGGER.debug("Discovered writable entities: %s", writable_dict)
+            writable_dict = coordinator.data.get(WRITABLE_DICT, {})
             chosen_writable_sensors = options.get(
                 CHOSEN_WRITABLE_SENSORS, list(writable_dict.keys())
             )
-            _LOGGER.debug("Chosen writable entities: %s", chosen_writable_sensors)
 
             for unique_id, endpoint_info in writable_dict.items():
                 if (
@@ -117,6 +113,13 @@ class EtaWritableNumberSensor(EtaCoordinatorEntity, NumberEntity):
         self._attr_native_step = pow(
             10, endpoint_info["valid_values"]["dec_places"] * -1
         )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        if self.unique_id in self.coordinator.data["values"]:
+            self._attr_native_value = self.coordinator.data["values"][self.unique_id]
+            self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""

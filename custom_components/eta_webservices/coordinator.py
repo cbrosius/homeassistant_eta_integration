@@ -46,7 +46,6 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
         self.session = async_get_clientsession(hass)
         self.device_name = device_name
         self.entry_id = entry_id
-        self.data = {}
         self.config = config
 
         super().__init__(
@@ -61,14 +60,13 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         """Update data via library."""
-        data = {}
-        eta_client = EtaAPI(self.session, self.host, self.port)
 
         # Discover entities on the first run
-        if not self.hass.data[DOMAIN][self.entry_id].get(self.device_name):
+        if not self.data:
             _LOGGER.info(
                 "First update for device %s, getting all endpoints", self.device_name
             )
+            eta_client = EtaAPI(self.session, self.host, self.port)
             entity_structure = await eta_client.get_entity_structure(self.device_name)
 
             float_dict = {}
@@ -88,7 +86,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                         entity_type = eta_client.classify_entity(metadata)
                         unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
                         metadata["friendly_name"] = " > ".join(
-                            current_path.split("_")[2:]
+                            current_path.split("_")[1:]
                         )
 
                         if entity_type == "sensor":
@@ -109,36 +107,37 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
             if entity_structure:
                 await discover_entities(entity_structure)
 
-            self.hass.data[DOMAIN][self.entry_id][self.device_name] = {
-                DATA_UPDATE_COORDINATOR: self,
+            # The coordinator's data will now hold everything
+            self.data = {
                 FLOAT_DICT: float_dict,
                 SWITCHES_DICT: switches_dict,
                 TEXT_DICT: text_dict,
                 WRITABLE_DICT: writable_dict,
+                "values": {}, # To store the entity values
             }
 
-        device_data = self.hass.data[DOMAIN][self.entry_id][self.device_name]
+        # Update the values for all chosen sensors
+        eta_client = EtaAPI(self.session, self.host, self.port)
         config_entry = self.hass.config_entries.async_get_entry(self.entry_id)
         options = config_entry.options
 
         all_sensors = {
-            **device_data.get(FLOAT_DICT, {}),
-            **device_data.get(SWITCHES_DICT, {}),
-            **device_data.get(TEXT_DICT, {}),
-            **device_data.get(WRITABLE_DICT, {}),
+            **self.data.get(FLOAT_DICT, {}),
+            **self.data.get(SWITCHES_DICT, {}),
+            **self.data.get(TEXT_DICT, {}),
+            **self.data.get(WRITABLE_DICT, {}),
         }
 
-        # If options are set, use them to filter sensors. Otherwise, use all.
-        chosen_sensors = [
-            *options.get(CHOSEN_FLOAT_SENSORS, []),
-            *options.get(CHOSEN_SWITCHES, []),
-            *options.get(CHOSEN_TEXT_SENSORS, []),
-            *options.get(CHOSEN_WRITABLE_SENSORS, []),
+        # If options are not set, update all discovered sensors
+        chosen_sensors_keys = [
+            *options.get(CHOSEN_FLOAT_SENSORS, list(self.data.get(FLOAT_DICT, {}).keys())),
+            *options.get(CHOSEN_SWITCHES, list(self.data.get(SWITCHES_DICT, {}).keys())),
+            *options.get(CHOSEN_TEXT_SENSORS, list(self.data.get(TEXT_DICT, {}).keys())),
+            *options.get(CHOSEN_WRITABLE_SENSORS, list(self.data.get(WRITABLE_DICT, {}).keys())),
         ]
-        if not chosen_sensors:
-            chosen_sensors = list(all_sensors.keys())
 
-        for sensor_key in chosen_sensors:
+        updated_values = {}
+        for sensor_key in chosen_sensors_keys:
             if sensor_key in all_sensors:
                 sensor_endpoint = all_sensors[sensor_key]
                 try:
@@ -147,7 +146,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                             sensor_endpoint["url"],
                             self._should_force_number_handling(sensor_endpoint["unit"]),
                         )
-                        data[sensor_key] = value
+                        updated_values[sensor_key] = value
                 except Exception as e:
                     _LOGGER.error(
                         "Error updating sensor %s for device %s: %s",
@@ -156,7 +155,8 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                         e,
                     )
 
-        return data
+        # Return a new data object with updated values
+        return {**self.data, "values": updated_values}
 
 
 class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):

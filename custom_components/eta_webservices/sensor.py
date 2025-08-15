@@ -28,7 +28,7 @@ from homeassistant.components.sensor import (
     ENTITY_ID_FORMAT,
 )
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant import config_entries
 from homeassistant.const import EntityCategory
 from .const import (
@@ -57,27 +57,20 @@ async def async_setup_entry(
 
     for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
-            _LOGGER.debug("Setting up sensor platform for device: %s", device_name)
-            device_data = hass.data[DOMAIN][entry_id][device_name]
-            coordinator = device_data[DATA_UPDATE_COORDINATOR]
+            coordinator = hass.data[DOMAIN][entry_id][device_name]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
 
-            float_sensors = device_data.get(FLOAT_DICT, {})
-            _LOGGER.debug("Discovered float sensors: %s", float_sensors)
-            # If options are not set, create all discovered sensors.
+            float_sensors = coordinator.data.get(FLOAT_DICT, {})
             chosen_float_sensors = options.get(
                 CHOSEN_FLOAT_SENSORS, list(float_sensors.keys())
             )
-            _LOGGER.debug("Chosen float sensors: %s", chosen_float_sensors)
 
-            text_sensors = device_data.get(TEXT_DICT, {})
-            _LOGGER.debug("Discovered text sensors: %s", text_sensors)
+            text_sensors = coordinator.data.get(TEXT_DICT, {})
             chosen_text_sensors = options.get(
                 CHOSEN_TEXT_SENSORS, list(text_sensors.keys())
             )
-            _LOGGER.debug("Chosen text sensors: %s", chosen_text_sensors)
 
             # Float sensors
             for unique_id, endpoint_info in float_sensors.items():
@@ -179,6 +172,13 @@ class EtaFloatSensor(EtaCoordinatorEntity, SensorEntity):
         else:
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        if self.unique_id in self.coordinator.data["values"]:
+            self._attr_native_value = self.coordinator.data["values"][self.unique_id]
+            self.async_write_ha_state()
+
 
 class EtaTextSensor(EtaCoordinatorEntity, SensorEntity):
     """Representation of a Text Sensor."""
@@ -202,6 +202,13 @@ class EtaTextSensor(EtaCoordinatorEntity, SensorEntity):
             ENTITY_ID_FORMAT,
             device_info,
         )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes when the coordinator updates."""
+        if self.unique_id in self.coordinator.data["values"]:
+            self._attr_native_value = self.coordinator.data["values"][self.unique_id]
+            self.async_write_ha_state()
 
 
 class EtaNbrErrorsSensor(SensorEntity, EtaErrorEntity):
