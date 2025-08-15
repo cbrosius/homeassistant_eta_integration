@@ -317,6 +317,38 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             # Update chosen entities for this device
             chosen_for_device = user_input.get("chosen_entities", [])
 
+            entity_registry = async_get(self.hass)
+            entities_for_config_entry = async_entries_for_config_entry(
+                entity_registry, self.config_entry.entry_id
+            )
+
+            # Create a map of unique_id to entity_id
+            entity_map = {
+                entity.unique_id: entity.entity_id
+                for entity in entities_for_config_entry
+            }
+
+            for unique_id, entity_data in all_entities.items():
+                if unique_id in entity_map:
+                    entity_id = entity_map[unique_id]
+                    entity = entity_registry.async_get(entity_id)
+
+                    if unique_id in chosen_for_device:
+                        # Entity is selected
+                        if entity and entity.disabled:
+                            _LOGGER.debug(f"Enabling entity {entity_id}")
+                            entity_registry.async_update_entity(
+                                entity_id, disabled_by=None
+                            )
+                    else:
+                        # Entity is not selected
+                        if entity and not entity.disabled:
+                            _LOGGER.debug(f"Disabling entity {entity_id}")
+                            entity_registry.async_update_entity(
+                                entity_id,
+                                disabled_by=config_entries.RegistryEntryDisabler.INTEGRATION,
+                            )
+
             # Helper to update a chosen list
             def update_chosen_list(chosen_list, entity_key, entity_type, expected_type):
                 is_chosen = entity_key in chosen_for_device
