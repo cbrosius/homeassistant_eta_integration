@@ -329,17 +329,34 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                 elif not is_chosen and is_in_list:
                     chosen_list.remove(entity_key)
 
+            session = async_get_clientsession(self.hass)
+            eta_client = EtaAPI(
+                session,
+                self.config_entry.data[CONF_HOST],
+                self.config_entry.data[CONF_PORT],
+            )
             for key, entity in all_entities.items():
                 entity_type = eta_client.classify_entity(entity)
                 update_chosen_list(
-                    options[CHOSEN_FLOAT_SENSORS], key, entity_type, "sensor"
+                    options.get(CHOSEN_FLOAT_SENSORS, []),
+                    key,
+                    entity_type,
+                    "sensor",
                 )
-                update_chosen_list(options[CHOSEN_SWITCHES], key, entity_type, "switch")
                 update_chosen_list(
-                    options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "number"
+                    options.get(CHOSEN_SWITCHES, []), key, entity_type, "switch"
                 )
                 update_chosen_list(
-                    options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "time"
+                    options.get(CHOSEN_WRITABLE_SENSORS, []),
+                    key,
+                    entity_type,
+                    "number",
+                )
+                update_chosen_list(
+                    options.get(CHOSEN_WRITABLE_SENSORS, []),
+                    key,
+                    entity_type,
+                    "time",
                 )
 
             return self.async_create_entry(title="", data=options)

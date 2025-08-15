@@ -9,6 +9,8 @@ from .const import (
     CHOSEN_DEVICES,
     FORCE_LEGACY_MODE,
     FORCE_SENSOR_DETECTION,
+    WRITABLE_DICT,
+    CHOSEN_WRITABLE_SENSORS,
 )
 
 PLATFORMS: list[Platform] = [
