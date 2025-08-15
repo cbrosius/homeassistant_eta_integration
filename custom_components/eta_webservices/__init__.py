@@ -39,25 +39,32 @@ async def async_setup_entry(
     if entry.options:
         config.update(entry.options)
 
-    error_coordinator = ETAErrorUpdateCoordinator(hass, config)
-    await error_coordinator.async_config_entry_first_refresh()
+    async def _async_finish_setup():
+        _LOGGER.debug("Forwarding entry setup to platforms: %s", PLATFORMS)
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await async_setup_services(hass, entry)
 
+    error_coordinator = ETAErrorUpdateCoordinator(hass, config)
     hass.data[DOMAIN][entry.entry_id] = {
         ERROR_UPDATE_COORDINATOR: error_coordinator,
         "config_entry_data": config,
     }
+    hass.async_create_task(error_coordinator.async_config_entry_first_refresh())
 
+    coordinators = []
     chosen_devices = config.get(CHOSEN_DEVICES, [])
     for device in chosen_devices:
         coordinator = EtaDataUpdateCoordinator(hass, config, device, entry.entry_id)
         hass.data[DOMAIN][entry.entry_id][device] = coordinator
-        await coordinator.async_config_entry_first_refresh()
+        coordinators.append(coordinator)
 
-    # Forward the setup to the sensor platform.
-    _LOGGER.debug("Forwarding entry setup to platforms: %s", PLATFORMS)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async def _refresh_and_finish():
+        refresh_tasks = [c.async_config_entry_first_refresh() for c in coordinators]
+        if refresh_tasks:
+            await asyncio.gather(*refresh_tasks)
+        await _async_finish_setup()
 
-    await async_setup_services(hass, entry)
+    hass.async_create_task(_refresh_and_finish())
 
     return True
 
