@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from asyncio import timeout
 from datetime import timedelta
 import logging
@@ -59,32 +60,81 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
         return unit == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT
 
     async def _async_update_data(self) -> dict:
-        """Update data via library."""
+        """Update data via library, using cached entities if available."""
 
         data = self.data if self.data is not None else {}
 
-        # Discover entities on the first run
+        # Discover entities only if not already populated
         if not data:
-            _LOGGER.info(
-                "First update for device %s, getting all endpoints", self.device_name
+            config_entry = self.hass.config_entries.async_get_entry(self.entry_id)
+            # Try to load from cache first
+            stored_entities = config_entry.data.get("discovered_entities", {}).get(
+                self.device_name
             )
-            eta_client = EtaAPI(self.session, self.host, self.port)
-            entity_structure = await eta_client.get_entity_structure(self.device_name)
 
-            float_dict = {}
-            switches_dict = {}
-            text_dict = {}
-            writable_dict = {}
+            if stored_entities:
+                _LOGGER.info("Using cached entities for device %s", self.device_name)
+                data = stored_entities
+            else:
+                # If not in cache, perform discovery
+                _LOGGER.info(
+                    "No cached entities found. Discovering entities for device %s. This may take a moment.",
+                    self.device_name,
+                )
+                eta_client = EtaAPI(self.session, self.host, self.port)
+                entity_structure = await eta_client.get_entity_structure(
+                    self.device_name
+                )
 
-            async def discover_entities(node, path=""):
-                name = node.get("name")
-                uri = node.get("uri")
+                leaf_nodes = []
 
-                current_path = f"{path}_{name}" if path else f"_{name}"
+                def collect_leaf_nodes(node, path=""):
+                    name = node.get("name")
+                    uri = node.get("uri")
+                    current_path = f"{path}_{name}" if path else f"_{name}"
 
-                if uri and not node.get("children"):
-                    metadata = await eta_client.async_get_entity_metadata(uri)
-                    if metadata:
+                    if uri and not node.get("children"):
+                        leaf_nodes.append({"uri": uri, "path": current_path})
+
+                    for child in node.get("children", []):
+                        collect_leaf_nodes(child, current_path)
+
+                if entity_structure:
+                    collect_leaf_nodes(entity_structure)
+
+                semaphore = asyncio.Semaphore(5)  # Limit concurrency to 5
+
+                async def fetch_metadata(leaf_node):
+                    async with semaphore:
+                        uri = leaf_node["uri"]
+                        metadata = await eta_client.async_get_entity_metadata(uri)
+                        return leaf_node, metadata
+
+                metadata_tasks = [fetch_metadata(node) for node in leaf_nodes]
+
+                float_dict = {}
+                switches_dict = {}
+                text_dict = {}
+                writable_dict = {}
+
+                if metadata_tasks:
+                    results = await asyncio.gather(
+                        *metadata_tasks, return_exceptions=True
+                    )
+
+                    for result in results:
+                        if isinstance(result, Exception):
+                            _LOGGER.warning("A metadata fetch task failed: %s", result)
+                            continue
+
+                        leaf_node, metadata = result
+                        if not metadata:
+                            _LOGGER.warning(
+                                "Failed to get metadata for node %s", leaf_node["uri"]
+                            )
+                            continue
+
+                        current_path = leaf_node["path"]
                         entity_type = eta_client.classify_entity(metadata)
                         unique_key = f"eta_{self.host.replace('.', '_')}_{current_path.lower().replace(' ', '_')}"
                         metadata["friendly_name"] = " > ".join(
@@ -103,19 +153,30 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                         elif entity_type == "time":
                             writable_dict[unique_key] = metadata
 
-                for child in node.get("children", []):
-                    await discover_entities(child, current_path)
+                discovered_data = {
+                    FLOAT_DICT: float_dict,
+                    SWITCHES_DICT: switches_dict,
+                    TEXT_DICT: text_dict,
+                    WRITABLE_DICT: writable_dict,
+                    "values": {},
+                }
 
-            if entity_structure:
-                await discover_entities(entity_structure)
+                # Persist the discovered data for next restart
+                _LOGGER.info(
+                    "Discovered %d entities. Caching for future restarts.",
+                    len(leaf_nodes),
+                )
+                new_entry_data = {**config_entry.data}
+                if "discovered_entities" not in new_entry_data:
+                    new_entry_data["discovered_entities"] = {}
+                new_entry_data["discovered_entities"][
+                    self.device_name
+                ] = discovered_data
+                self.hass.config_entries.async_update_entry(
+                    config_entry, data=new_entry_data
+                )
 
-            data = {
-                FLOAT_DICT: float_dict,
-                SWITCHES_DICT: switches_dict,
-                TEXT_DICT: text_dict,
-                WRITABLE_DICT: writable_dict,
-                "values": {},  # To store the entity values
-            }
+                data = discovered_data
 
         # Update the values for all chosen sensors
         eta_client = EtaAPI(self.session, self.host, self.port)
