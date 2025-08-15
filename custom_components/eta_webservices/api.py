@@ -340,6 +340,8 @@ class EtaAPI:
             and "value" in data["validValues"]
         ):
             values = data["validValues"]["value"]
+            if not isinstance(values, list):
+                values = [values]
             valid_values = dict(
                 zip(
                     [k["@strValue"] for k in values],
