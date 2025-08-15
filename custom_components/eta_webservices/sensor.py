@@ -35,15 +35,13 @@ from .const import (
     DOMAIN,
     CHOSEN_FLOAT_SENSORS,
     CHOSEN_TEXT_SENSORS,
-    CHOSEN_WRITABLE_SENSORS,
+    CHOSEN_DEVICES,
     FLOAT_DICT,
     TEXT_DICT,
     ERROR_UPDATE_COORDINATOR,
     DATA_UPDATE_COORDINATOR,
 )
 from .utils import create_device_info
-
-SCAN_INTERVAL = timedelta(minutes=1)
 
 
 async def async_setup_entry(
@@ -57,7 +55,7 @@ async def async_setup_entry(
     options = config_entry.options
     sensors = []
 
-    for device_name in config.get("chosen_devices", []):
+    for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
             device_data = hass.data[DOMAIN][entry_id][device_name]
             coordinator = device_data[DATA_UPDATE_COORDINATOR]
@@ -66,9 +64,11 @@ async def async_setup_entry(
             )
 
             float_sensors = device_data.get(FLOAT_DICT, {})
+            # If options are not set, create all discovered sensors.
             chosen_float_sensors = options.get(
                 CHOSEN_FLOAT_SENSORS, list(float_sensors.keys())
             )
+
             text_sensors = device_data.get(TEXT_DICT, {})
             chosen_text_sensors = options.get(
                 CHOSEN_TEXT_SENSORS, list(text_sensors.keys())

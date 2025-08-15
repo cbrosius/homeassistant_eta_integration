@@ -3,7 +3,7 @@ import logging
 from homeassistant.core import HomeAssistant, callback
 from homeassistant import config_entries
 from homeassistant.components.switch import SwitchEntity, ENTITY_ID_FORMAT
-from .const import DOMAIN, CHOSEN_SWITCHES, SWITCHES_DICT, DATA_UPDATE_COORDINATOR
+from .const import DOMAIN, CHOSEN_SWITCHES, SWITCHES_DICT, DATA_UPDATE_COORDINATOR, CHOSEN_DEVICES
 from .api import EtaAPI, ETAEndpoint
 from .entity import EtaCoordinatorEntity
 from .coordinator import EtaDataUpdateCoordinator
@@ -23,7 +23,7 @@ async def async_setup_entry(
     options = config_entry.options
     switches = []
 
-    for device_name in config.get("chosen_devices", []):
+    for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
             device_data = hass.data[DOMAIN][entry_id][device_name]
             coordinator = device_data[DATA_UPDATE_COORDINATOR]
@@ -90,9 +90,11 @@ class EtaSwitch(EtaCoordinatorEntity, SwitchEntity):
         if await eta_client.set_switch_state(self.uri, self.on_value):
             self._attr_is_on = True
             self.async_write_ha_state()
+            await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs):
         eta_client = EtaAPI(self.session, self.host, self.port)
         if await eta_client.set_switch_state(self.uri, self.off_value):
             self._attr_is_on = False
             self.async_write_ha_state()
+            await self.coordinator.async_request_refresh()

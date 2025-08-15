@@ -17,6 +17,7 @@ from .const import (
     WRITABLE_DICT,
     CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
     DATA_UPDATE_COORDINATOR,
+    CHOSEN_DEVICES,
 )
 from .utils import create_device_info
 
@@ -32,7 +33,7 @@ async def async_setup_entry(
     options = config_entry.options
     time_sensors = []
 
-    for device_name in config.get("chosen_devices", []):
+    for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
             device_data = hass.data[DOMAIN][entry_id][device_name]
             coordinator = device_data[DATA_UPDATE_COORDINATOR]
@@ -105,4 +106,4 @@ class EtaTime(EtaCoordinatorEntity, TimeEntity):
         success = await eta_client.write_endpoint(self.uri, total_minutes)
         if not success:
             raise HomeAssistantError("Could not write value, see log for details")
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_request_refresh()

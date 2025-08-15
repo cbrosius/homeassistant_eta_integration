@@ -31,6 +31,7 @@ from .const import (
     WRITABLE_DICT,
     DATA_UPDATE_COORDINATOR,
     INVISIBLE_UNITS,
+    CHOSEN_DEVICES,
 )
 from .utils import create_device_info
 
@@ -46,7 +47,7 @@ async def async_setup_entry(
     options = config_entry.options
     numbers = []
 
-    for device_name in config.get("chosen_devices", []):
+    for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
             device_data = hass.data[DOMAIN][entry_id][device_name]
             coordinator = device_data[DATA_UPDATE_COORDINATOR]
@@ -122,7 +123,7 @@ class EtaWritableNumberSensor(EtaCoordinatorEntity, NumberEntity):
         success = await eta_client.write_endpoint(self.uri, raw_value)
         if not success:
             raise HomeAssistantError("Could not write value, see log for details")
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_request_refresh()
 
     @staticmethod
     def determine_device_class(unit):
