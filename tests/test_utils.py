@@ -32,7 +32,9 @@ def test_create_device_info_default_name():
 
     # Then
     assert isinstance(device_info, dict)
-    assert device_info["identifiers"] == {("eta_webservices", "eta_192_168_1_1_8888_ETA")}
+    assert device_info["identifiers"] == {
+        ("eta_webservices", "eta_192_168_1_1_8888_ETA")
+    }
     assert device_info["name"] == "ETA"
     assert device_info["manufacturer"] == "ETA"
     assert device_info["configuration_url"] == "https://www.meineta.at"

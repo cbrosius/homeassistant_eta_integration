@@ -192,13 +192,9 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
 
         # If options are not set, update all discovered sensors
         chosen_sensors_keys = [
-            *options.get(
-                CHOSEN_FLOAT_SENSORS, list(data.get(FLOAT_DICT, {}).keys())
-            ),
+            *options.get(CHOSEN_FLOAT_SENSORS, list(data.get(FLOAT_DICT, {}).keys())),
             *options.get(CHOSEN_SWITCHES, list(data.get(SWITCHES_DICT, {}).keys())),
-            *options.get(
-                CHOSEN_TEXT_SENSORS, list(data.get(TEXT_DICT, {}).keys())
-            ),
+            *options.get(CHOSEN_TEXT_SENSORS, list(data.get(TEXT_DICT, {}).keys())),
             *options.get(
                 CHOSEN_WRITABLE_SENSORS, list(data.get(WRITABLE_DICT, {}).keys())
             ),
