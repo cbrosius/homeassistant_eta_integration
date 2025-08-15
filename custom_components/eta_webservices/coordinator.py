@@ -61,8 +61,10 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Update data via library."""
 
+        data = self.data if self.data is not None else {}
+
         # Discover entities on the first run
-        if not self.data:
+        if not data:
             _LOGGER.info(
                 "First update for device %s, getting all endpoints", self.device_name
             )
@@ -107,8 +109,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
             if entity_structure:
                 await discover_entities(entity_structure)
 
-            # The coordinator's data will now hold everything
-            self.data = {
+            data = {
                 FLOAT_DICT: float_dict,
                 SWITCHES_DICT: switches_dict,
                 TEXT_DICT: text_dict,
@@ -122,25 +123,23 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
         options = config_entry.options
 
         all_sensors = {
-            **self.data.get(FLOAT_DICT, {}),
-            **self.data.get(SWITCHES_DICT, {}),
-            **self.data.get(TEXT_DICT, {}),
-            **self.data.get(WRITABLE_DICT, {}),
+            **data.get(FLOAT_DICT, {}),
+            **data.get(SWITCHES_DICT, {}),
+            **data.get(TEXT_DICT, {}),
+            **data.get(WRITABLE_DICT, {}),
         }
 
         # If options are not set, update all discovered sensors
         chosen_sensors_keys = [
             *options.get(
-                CHOSEN_FLOAT_SENSORS, list(self.data.get(FLOAT_DICT, {}).keys())
+                CHOSEN_FLOAT_SENSORS, list(data.get(FLOAT_DICT, {}).keys())
+            ),
+            *options.get(CHOSEN_SWITCHES, list(data.get(SWITCHES_DICT, {}).keys())),
+            *options.get(
+                CHOSEN_TEXT_SENSORS, list(data.get(TEXT_DICT, {}).keys())
             ),
             *options.get(
-                CHOSEN_SWITCHES, list(self.data.get(SWITCHES_DICT, {}).keys())
-            ),
-            *options.get(
-                CHOSEN_TEXT_SENSORS, list(self.data.get(TEXT_DICT, {}).keys())
-            ),
-            *options.get(
-                CHOSEN_WRITABLE_SENSORS, list(self.data.get(WRITABLE_DICT, {}).keys())
+                CHOSEN_WRITABLE_SENSORS, list(data.get(WRITABLE_DICT, {}).keys())
             ),
         ]
 
@@ -164,7 +163,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                     )
 
         # Return a new data object with updated values
-        return {**self.data, "values": updated_values}
+        return {**data, "values": updated_values}
 
 
 class ETAErrorUpdateCoordinator(DataUpdateCoordinator[list[ETAError]]):
