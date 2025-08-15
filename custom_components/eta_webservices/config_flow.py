@@ -266,9 +266,8 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         """Manage the options."""
         self.data = self.config_entry.data
-        self.device_name = (
-            self.handler.context.get("device") if self.handler.context else None
-        )
+        self.device_name = self.context.get("device") if self.context else None
+        self._errors = {}
 
         if self.device_name:
             return await self.async_step_select_entities()
@@ -363,7 +362,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
         device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
             self.device_name
-        ]
+        ].data
         all_entities = {
             **device_data.get(FLOAT_DICT, {}),
             **device_data.get(SWITCHES_DICT, {}),
