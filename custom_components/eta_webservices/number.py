@@ -63,6 +63,7 @@ async def async_setup_entry(
                 if (
                     unique_id in chosen_writable_sensors
                     and endpoint_info.get("unit") not in INVISIBLE_UNITS
+                    and endpoint_info.get("valid_values")
                 ):
                     _LOGGER.debug(
                         "Creating number entity for %s with endpoint_info: %s",
