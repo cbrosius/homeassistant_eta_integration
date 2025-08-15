@@ -3,7 +3,13 @@ import logging
 from homeassistant.core import HomeAssistant, callback
 from homeassistant import config_entries
 from homeassistant.components.switch import SwitchEntity, ENTITY_ID_FORMAT
-from .const import DOMAIN, CHOSEN_SWITCHES, SWITCHES_DICT, DATA_UPDATE_COORDINATOR, CHOSEN_DEVICES
+from .const import (
+    DOMAIN,
+    CHOSEN_SWITCHES,
+    SWITCHES_DICT,
+    DATA_UPDATE_COORDINATOR,
+    CHOSEN_DEVICES,
+)
 from .api import EtaAPI, ETAEndpoint
 from .entity import EtaCoordinatorEntity
 from .coordinator import EtaDataUpdateCoordinator
@@ -31,9 +37,7 @@ async def async_setup_entry(
             )
 
             switches_dict = coordinator.data.get(SWITCHES_DICT, {})
-            chosen_switches = options.get(
-                CHOSEN_SWITCHES, list(switches_dict.keys())
-            )
+            chosen_switches = options.get(CHOSEN_SWITCHES, list(switches_dict.keys()))
 
             for unique_id, endpoint_info in switches_dict.items():
                 if unique_id in chosen_switches:
@@ -81,7 +85,9 @@ class EtaSwitch(EtaCoordinatorEntity, SwitchEntity):
     def _handle_coordinator_update(self) -> None:
         """Update attributes when the coordinator updates."""
         if self.unique_id in self.coordinator.data["values"]:
-            self._attr_is_on = self.coordinator.data["values"][self.unique_id] == self.on_value
+            self._attr_is_on = (
+                self.coordinator.data["values"][self.unique_id] == self.on_value
+            )
             self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs):

@@ -113,7 +113,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                 SWITCHES_DICT: switches_dict,
                 TEXT_DICT: text_dict,
                 WRITABLE_DICT: writable_dict,
-                "values": {}, # To store the entity values
+                "values": {},  # To store the entity values
             }
 
         # Update the values for all chosen sensors
@@ -130,10 +130,18 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
 
         # If options are not set, update all discovered sensors
         chosen_sensors_keys = [
-            *options.get(CHOSEN_FLOAT_SENSORS, list(self.data.get(FLOAT_DICT, {}).keys())),
-            *options.get(CHOSEN_SWITCHES, list(self.data.get(SWITCHES_DICT, {}).keys())),
-            *options.get(CHOSEN_TEXT_SENSORS, list(self.data.get(TEXT_DICT, {}).keys())),
-            *options.get(CHOSEN_WRITABLE_SENSORS, list(self.data.get(WRITABLE_DICT, {}).keys())),
+            *options.get(
+                CHOSEN_FLOAT_SENSORS, list(self.data.get(FLOAT_DICT, {}).keys())
+            ),
+            *options.get(
+                CHOSEN_SWITCHES, list(self.data.get(SWITCHES_DICT, {}).keys())
+            ),
+            *options.get(
+                CHOSEN_TEXT_SENSORS, list(self.data.get(TEXT_DICT, {}).keys())
+            ),
+            *options.get(
+                CHOSEN_WRITABLE_SENSORS, list(self.data.get(WRITABLE_DICT, {}).keys())
+            ),
         ]
 
         updated_values = {}

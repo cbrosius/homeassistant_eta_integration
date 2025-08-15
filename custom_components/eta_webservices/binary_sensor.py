@@ -28,7 +28,9 @@ async def async_setup_entry(
     """Setup error sensor"""
     config = hass.data[DOMAIN][config_entry.entry_id]["config_entry_data"]
 
-    error_coordinator = hass.data[DOMAIN][config_entry.entry_id][ERROR_UPDATE_COORDINATOR]
+    error_coordinator = hass.data[DOMAIN][config_entry.entry_id][
+        ERROR_UPDATE_COORDINATOR
+    ]
 
     sensors = [EtaErrorSensor(config, hass, error_coordinator)]
     async_add_entities(sensors, update_before_add=True)
@@ -64,7 +66,6 @@ class EtaErrorSensor(BinarySensorEntity, EtaErrorEntity):
         self.entity_id = generate_entity_id(
             ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
         )
-
 
     def handle_data_updates(self, data: list):
         self._attr_is_on = len(data) > 0

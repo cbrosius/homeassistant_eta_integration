@@ -235,7 +235,6 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error(f"Error getting devices from ETA API: {e}")
             return []
 
-
     async def _test_url(self, host, port):
         """Return true if host port is valid."""
         session = async_get_clientsession(self.hass)
@@ -267,7 +266,9 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):  # pylint: disable=unused-argument
         """Manage the options."""
         self.data = self.config_entry.data
-        self.device_name = self.handler.context.get("device") if self.handler.context else None
+        self.device_name = (
+            self.handler.context.get("device") if self.handler.context else None
+        )
 
         if self.device_name:
             return await self.async_step_select_entities()
@@ -330,10 +331,16 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
             for key, entity in all_entities.items():
                 entity_type = eta_client.classify_entity(entity)
-                update_chosen_list(options[CHOSEN_FLOAT_SENSORS], key, entity_type, "sensor")
+                update_chosen_list(
+                    options[CHOSEN_FLOAT_SENSORS], key, entity_type, "sensor"
+                )
                 update_chosen_list(options[CHOSEN_SWITCHES], key, entity_type, "switch")
-                update_chosen_list(options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "number")
-                update_chosen_list(options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "time")
+                update_chosen_list(
+                    options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "number"
+                )
+                update_chosen_list(
+                    options[CHOSEN_WRITABLE_SENSORS], key, entity_type, "time"
+                )
 
             return self.async_create_entry(title="", data=options)
 
@@ -357,9 +364,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                             *self.config_entry.options.get(CHOSEN_FLOAT_SENSORS, []),
                             *self.config_entry.options.get(CHOSEN_SWITCHES, []),
                             *self.config_entry.options.get(CHOSEN_TEXT_SENSORS, []),
-                            *self.config_entry.options.get(
-                                CHOSEN_WRITABLE_SENSORS, []
-                            ),
+                            *self.config_entry.options.get(CHOSEN_WRITABLE_SENSORS, []),
                         ],
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(

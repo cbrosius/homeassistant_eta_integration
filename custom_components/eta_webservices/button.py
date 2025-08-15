@@ -32,9 +32,7 @@ async def async_setup_entry(
 
     # Device-specific config buttons
     for device_name in config.get("chosen_devices", []):
-        device_info = create_device_info(
-            config["host"], config["port"], device_name
-        )
+        device_info = create_device_info(config["host"], config["port"], device_name)
         buttons.append(
             EtaDeviceConfigButton(config, hass, device_name, device_info, entry_id)
         )
