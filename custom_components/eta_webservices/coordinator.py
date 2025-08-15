@@ -80,7 +80,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
 
                 current_path = f"{path}_{name}" if path else f"_{name}"
 
-                if uri:
+                if uri and not node.get("children"):
                     metadata = await eta_client.async_get_entity_metadata(uri)
                     if metadata:
                         entity_type = eta_client.classify_entity(metadata)
