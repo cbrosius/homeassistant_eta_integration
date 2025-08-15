@@ -234,20 +234,24 @@ class EtaAPI:
 
     def classify_entity(self, endpoint_info: ETAEndpoint) -> str | None:
         """Classify an entity based on its metadata."""
+        _LOGGER.debug("Classifying entity: %s", endpoint_info)
+        entity_type = None
         if self._is_writable(endpoint_info) or self._is_writable_v11(endpoint_info):
             if endpoint_info.get("unit") == CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT:
-                return "time"
+                entity_type = "time"
             else:
-                return "number"
+                entity_type = "number"
         elif self._is_switch(endpoint_info) or self._is_switch_v11(
             endpoint_info, str(endpoint_info.get("value"))
         ):
-            return "switch"
+            entity_type = "switch"
         elif self._is_float_sensor(endpoint_info):
-            return "sensor"
+            entity_type = "sensor"
         elif self._is_text_sensor(endpoint_info):
-            return "sensor"
-        return None
+            entity_type = "sensor"
+
+        _LOGGER.debug("Classified as: %s", entity_type)
+        return entity_type
 
     def _is_switch_v11(self, endpoint_info: ETAEndpoint, raw_value: str):
         if endpoint_info["unit"] == "" and raw_value in ("1802", "1803"):
