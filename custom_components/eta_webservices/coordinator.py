@@ -23,6 +23,7 @@ from .const import (
     CHOSEN_WRITABLE_SENSORS,
     CUSTOM_UNIT_MINUTES_SINCE_MIDNIGHT,
     FORCE_LEGACY_MODE,
+    DATA_UPDATE_COORDINATOR,
 )
 from .api import EtaAPI, ETAError, ETAEndpoint
 
@@ -106,7 +107,7 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                 await discover_entities(entity_structure)
 
             self.hass.data[DOMAIN][self.entry_id][self.device_name] = {
-                "coordinator": self,
+                DATA_UPDATE_COORDINATOR: self,
                 FLOAT_DICT: float_dict,
                 SWITCHES_DICT: switches_dict,
                 TEXT_DICT: text_dict,

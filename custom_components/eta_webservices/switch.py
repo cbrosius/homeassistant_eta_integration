@@ -26,7 +26,7 @@ async def async_setup_entry(
     for device_name in config.get("chosen_devices", []):
         if device_name in hass.data[DOMAIN][entry_id]:
             device_data = hass.data[DOMAIN][entry_id][device_name]
-            coordinator = device_data["coordinator"]
+            coordinator = device_data[DATA_UPDATE_COORDINATOR]
             device_info = create_device_info(
                 config["host"], config["port"], device_name
             )
