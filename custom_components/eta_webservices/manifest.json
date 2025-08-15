@@ -10,16 +10,5 @@
   "loggers": ["myETA"],
   "requirements": ["xmltodict", "packaging"],
   "version": "0.0.0.6",
-  "repairs": true,
   "integration_type": "hub",
-  "translations": [
-    {
-      "type": "json",
-      "path": "translations/en.json"
-    },
-    {
-      "type": "json",
-      "path": "translations/de.json"
-    }
-  ]
 }
