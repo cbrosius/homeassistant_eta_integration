@@ -49,6 +49,7 @@ async def async_setup_entry(
 
     for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
+            _LOGGER.debug("Setting up number platform for device: %s", device_name)
             device_data = hass.data[DOMAIN][entry_id][device_name]
             coordinator = device_data[DATA_UPDATE_COORDINATOR]
             device_info = create_device_info(
@@ -56,9 +57,11 @@ async def async_setup_entry(
             )
 
             writable_dict = device_data.get(WRITABLE_DICT, {})
+            _LOGGER.debug("Discovered writable entities: %s", writable_dict)
             chosen_writable_sensors = options.get(
                 CHOSEN_WRITABLE_SENSORS, list(writable_dict.keys())
             )
+            _LOGGER.debug("Chosen writable entities: %s", chosen_writable_sensors)
 
             for unique_id, endpoint_info in writable_dict.items():
                 if (

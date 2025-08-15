@@ -57,6 +57,7 @@ async def async_setup_entry(
 
     for device_name in config.get(CHOSEN_DEVICES, []):
         if device_name in hass.data[DOMAIN][entry_id]:
+            _LOGGER.debug("Setting up sensor platform for device: %s", device_name)
             device_data = hass.data[DOMAIN][entry_id][device_name]
             coordinator = device_data[DATA_UPDATE_COORDINATOR]
             device_info = create_device_info(
@@ -64,15 +65,19 @@ async def async_setup_entry(
             )
 
             float_sensors = device_data.get(FLOAT_DICT, {})
+            _LOGGER.debug("Discovered float sensors: %s", float_sensors)
             # If options are not set, create all discovered sensors.
             chosen_float_sensors = options.get(
                 CHOSEN_FLOAT_SENSORS, list(float_sensors.keys())
             )
+            _LOGGER.debug("Chosen float sensors: %s", chosen_float_sensors)
 
             text_sensors = device_data.get(TEXT_DICT, {})
+            _LOGGER.debug("Discovered text sensors: %s", text_sensors)
             chosen_text_sensors = options.get(
                 CHOSEN_TEXT_SENSORS, list(text_sensors.keys())
             )
+            _LOGGER.debug("Chosen text sensors: %s", chosen_text_sensors)
 
             # Float sensors
             for unique_id, endpoint_info in float_sensors.items():
