@@ -10,5 +10,5 @@
   "loggers": ["myETA"],
   "requirements": ["xmltodict", "packaging"],
   "version": "0.0.0.6",
-  "integration_type": "hub",
+  "integration_type": "hub"
 }
