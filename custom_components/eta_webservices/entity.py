@@ -55,10 +55,15 @@ class EtaCoordinatorEntity(CoordinatorEntity, EtaEntity):
         )
         CoordinatorEntity.__init__(self, coordinator)
         self._attr_device_info = device_info
+        self._endpoint_info = endpoint_info
 
     @property
     def entity_registry_enabled_default(self) -> bool:
         """Return if the entity should be enabled by default."""
+        if "unit" in self._endpoint_info:
+            unit = self._endpoint_info["unit"]
+            if unit in ["°C", "kg", "bar", "%", "%rH"]:
+                return True
         return False
 
     @callback
