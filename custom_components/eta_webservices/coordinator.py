@@ -92,7 +92,10 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                         )
 
                         if entity_type == "sensor":
-                            float_dict[unique_key] = metadata
+                            if metadata.get("unit") == "":
+                                text_dict[unique_key] = metadata
+                            else:
+                                float_dict[unique_key] = metadata
                         elif entity_type == "switch":
                             switches_dict[unique_key] = metadata
                         elif entity_type == "number":
