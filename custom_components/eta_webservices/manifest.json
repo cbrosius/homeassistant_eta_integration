@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/cbrosius/homeassistant_eta_integration/issues",
   "loggers": ["myETA"],
   "requirements": ["xmltodict", "packaging"],
-  "version": "0.0.0.14"
+  "version": "0.0.0.15"
 }
