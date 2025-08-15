@@ -69,9 +69,7 @@ from custom_components.eta_webservices.const import (
         ),
     ],
 )
-def test_parse_data(
-    input_data, force_number_handling, expected_value, expected_unit
-):
+def test_parse_data(input_data, force_number_handling, expected_value, expected_unit):
     """Test the _parse_data method with various inputs."""
     # Given
     session = MagicMock()
