@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from homeassistant import config_entries, core
 from homeassistant.const import Platform
 
@@ -49,7 +50,6 @@ async def async_setup_entry(
         ERROR_UPDATE_COORDINATOR: error_coordinator,
         "config_entry_data": config,
     }
-    hass.async_create_task(error_coordinator.async_config_entry_first_refresh())
 
     coordinators = []
     chosen_devices = config.get(CHOSEN_DEVICES, [])
@@ -58,13 +58,13 @@ async def async_setup_entry(
         hass.data[DOMAIN][entry.entry_id][device] = coordinator
         coordinators.append(coordinator)
 
-    async def _refresh_and_finish():
-        refresh_tasks = [c.async_config_entry_first_refresh() for c in coordinators]
-        if refresh_tasks:
-            await asyncio.gather(*refresh_tasks)
-        await _async_finish_setup()
+    refresh_tasks = [c.async_config_entry_first_refresh() for c in coordinators]
+    refresh_tasks.append(error_coordinator.async_config_entry_first_refresh())
 
-    hass.async_create_task(_refresh_and_finish())
+    if refresh_tasks:
+        await asyncio.gather(*refresh_tasks)
+
+    await _async_finish_setup()
 
     return True
 

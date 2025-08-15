@@ -30,13 +30,6 @@ async def async_setup_entry(
     error_coordinator = hass.data[DOMAIN][entry_id][ERROR_UPDATE_COORDINATOR]
     buttons.append(EtaResendErrorEventsButton(config, hass, error_coordinator))
 
-    # Device-specific config buttons
-    for device_name in config.get("chosen_devices", []):
-        device_info = create_device_info(config["host"], config["port"], device_name)
-        buttons.append(
-            EtaDeviceConfigButton(config, hass, device_name, device_info, entry_id)
-        )
-
     async_add_entities(buttons)
 
 
@@ -69,42 +62,3 @@ class EtaResendErrorEventsButton(ButtonEntity):
         # Delete the old error list to force the coordinator to resend all events
         self.coordinator.data = []
         await self.coordinator.async_refresh()
-
-
-class EtaDeviceConfigButton(ButtonEntity):
-    """Button to trigger the device-specific entity config flow."""
-
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_entity_category = EntityCategory.CONFIG
-
-    def __init__(
-        self,
-        config: dict,
-        hass: HomeAssistant,
-        device_name: str,
-        device_info,
-        entry_id: str,
-    ) -> None:
-        self.device_name = device_name
-        self.hass = hass
-        self.entry_id = entry_id
-        host = config.get(CONF_HOST)
-        port = config.get(CONF_PORT)
-
-        self._attr_translation_key = "configure_device_entities"
-        self._attr_unique_id = (
-            f"eta_{host.replace('.', '_')}_{port}_{device_name}_config_btn"
-        )
-        self.entity_id = generate_entity_id(
-            ENTITY_ID_FORMAT, self._attr_unique_id, hass=hass
-        )
-        self._attr_device_info = device_info
-        self._attr_name = f"Configure {device_name}"
-
-    async def async_press(self) -> None:
-        """Trigger the config flow for this device."""
-        await self.hass.config_entries.options.async_create_flow(
-            self.entry_id,
-            context={"source": "user", "device": self.device_name},
-        )
