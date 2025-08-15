@@ -9,6 +9,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.entity_registry import (
+    RegistryEntryDisabler,
     async_entries_for_config_entry,
     async_get,
 )
@@ -346,7 +347,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
                             _LOGGER.debug(f"Disabling entity {entity_id}")
                             entity_registry.async_update_entity(
                                 entity_id,
-                                disabled_by=config_entries.RegistryEntryDisabler.INTEGRATION,
+                                disabled_by=RegistryEntryDisabler.INTEGRATION,
                             )
 
             # Helper to update a chosen list
