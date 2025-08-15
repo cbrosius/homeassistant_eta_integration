@@ -258,7 +258,6 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
         self.data = {}
         self._errors = {}
         self.device_name = None
@@ -307,7 +306,7 @@ class EtaOptionsFlowHandler(config_entries.OptionsFlow):
             # Get all entities for the device
             device_data = self.hass.data[DOMAIN][self.config_entry.entry_id][
                 self.device_name
-            ]
+            ].data
             all_entities = {
                 **device_data.get(FLOAT_DICT, {}),
                 **device_data.get(SWITCHES_DICT, {}),
