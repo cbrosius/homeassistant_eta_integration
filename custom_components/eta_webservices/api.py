@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 import logging
 from typing import TypedDict
@@ -47,6 +48,10 @@ class EtaAPI:
         self._session: ClientSession = session
         self._host = host
         self._port = int(port)
+        # Cache for API responses to avoid redundant requests
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._cache_ttl = 30  # Cache TTL in seconds
 
         self._float_sensor_units = [
             "%",
@@ -101,6 +106,27 @@ class EtaAPI:
 
     def build_uri(self, suffix):
         return "http://" + self._host + ":" + str(self._port) + suffix
+
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cached data is still valid."""
+        if cache_key not in self._cache_timestamps:
+            return False
+        import time
+        return (time.time() - self._cache_timestamps[cache_key]) < self._cache_ttl
+
+    def _get_cached_data(self, cache_key: str):
+        """Get data from cache if valid."""
+        if self._is_cache_valid(cache_key):
+            _LOGGER.debug(f"Using cached data for {cache_key}")
+            return self._cache[cache_key]
+        return None
+
+    def _set_cached_data(self, cache_key: str, data):
+        """Store data in cache with timestamp."""
+        import time
+        self._cache[cache_key] = data
+        self._cache_timestamps[cache_key] = time.time()
+        _LOGGER.debug(f"Cached data for {cache_key}")
 
     def _parse_menu_node(self, node):
         """Recursively parse a node from the /user/menu XML."""
@@ -188,16 +214,31 @@ class EtaAPI:
         return value, unit, data
 
     async def get_menu(self):
+        cache_key = "menu"
+        cached_data = self._get_cached_data(cache_key)
+        if cached_data:
+            return cached_data
+
         data = await self._get_request("/user/menu")
         text = await data.text()
-        return xmltodict.parse(text)
+        parsed_data = xmltodict.parse(text)
+        self._set_cached_data(cache_key, parsed_data)
+        return parsed_data
 
     async def async_get_entity_metadata(self, uri: str) -> dict:
-        """Get detailed metadata for a single entity URI."""
-        if await self.is_correct_api_version():
-            return await self._get_entity_metadata_v12(uri)
-        else:
-            return await self._get_entity_metadata_v11(uri)
+        """Get detailed metadata for a single entity URI with timeout."""
+        try:
+            async with asyncio.timeout(15):  # 15 second timeout per metadata request
+                if await self.is_correct_api_version():
+                    return await self._get_entity_metadata_v12(uri)
+                else:
+                    return await self._get_entity_metadata_v11(uri)
+        except asyncio.TimeoutError:
+            _LOGGER.warning(f"Timeout getting metadata for URI {uri}")
+            return None
+        except Exception as e:
+            _LOGGER.warning(f"Error getting metadata for URI {uri}: {e}")
+            return None
 
     async def _get_entity_metadata_v11(self, uri: str) -> dict:
         """Get metadata for a single entity on API v1.1."""
@@ -378,6 +419,14 @@ class EtaAPI:
         )
 
     async def _get_varinfo(self, fub, uri):
+        cache_key = f"varinfo_{uri}"
+        cached_data = self._get_cached_data(cache_key)
+        if cached_data:
+            endpoint_info = cached_data.copy()
+            if fub:
+                endpoint_info["friendly_name"] = f"{fub} > {endpoint_info['friendly_name']}"
+            return endpoint_info
+
         data = await self._get_request("/user/varinfo/" + str(uri))
         text = await data.text()
         parsed_xml = xmltodict.parse(text)
@@ -387,6 +436,10 @@ class EtaAPI:
         data = parsed_xml["eta"]["varInfo"]["variable"]
         endpoint_info = self._parse_varinfo(data)
         endpoint_info["url"] = uri
+
+        # Cache the base endpoint info (without fub prefix)
+        self._set_cached_data(cache_key, endpoint_info.copy())
+
         if fub:
             endpoint_info["friendly_name"] = f"{fub} > {endpoint_info['friendly_name']}"
         return endpoint_info

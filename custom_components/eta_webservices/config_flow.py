@@ -1,5 +1,6 @@
 """Adds config flow for Blueprint."""
 
+import asyncio
 import copy
 import logging
 import voluptuous as vol
@@ -109,12 +110,15 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         devices = self.data.get("possible_devices", [])
         return self.async_show_form(
             step_id="confirm_scan",
-            description_placeholders={"devices": ", ".join(devices)},
+            description_placeholders={
+                "devices": ", ".join(devices),
+                "device_count": str(len(devices))
+            },
             data_schema=vol.Schema({}),
         )
 
     async def _scan_device(self, device_name: str):
-        """Scan a device and get all its entities."""
+        """Scan a device and get all its entities with optimized concurrency."""
         session = async_get_clientsession(self.hass)
         eta_client = EtaAPI(session, self.data[CONF_HOST], self.data[CONF_PORT])
 
@@ -125,60 +129,129 @@ class EtaFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             WRITABLE_DICT: {},
         }
 
-        async def traverse_and_scan(node):
+        def collect_uris(node, uris=None):
+            """Iteratively collect all URIs from the device structure."""
+            if uris is None:
+                uris = []
+
             if not node:
-                return
+                return uris
 
-            if uri := node.get("uri"):
-                try:
-                    metadata = await eta_client.async_get_entity_metadata(uri)
-                    if metadata:
-                        entity_type = eta_client.classify_entity(metadata)
-                        if entity_type == "sensor":
-                            if metadata.get("unit") == "":
-                                entities[TEXT_DICT][uri] = metadata
-                            else:
-                                entities[FLOAT_DICT][uri] = metadata
-                        elif entity_type == "switch":
-                            entities[SWITCHES_DICT][uri] = metadata
-                        elif entity_type in ("number", "time"):
-                            entities[WRITABLE_DICT][uri] = metadata
-                except Exception as e:
-                    _LOGGER.warning(f"Could not scan URI {uri}: {e}")
+            # Use iterative approach instead of recursion for better performance
+            stack = [node]
+            while stack:
+                current_node = stack.pop()
+                if uri := current_node.get("uri"):
+                    uris.append(uri)
 
-            if children := node.get("children"):
-                for child in children:
-                    await traverse_and_scan(child)
+                if children := current_node.get("children"):
+                    # Add children in reverse order to maintain proper traversal
+                    for child in reversed(children):
+                        stack.append(child)
+
+            return uris
 
         structure = await eta_client.get_entity_structure(device_name)
-        await traverse_and_scan(structure)
+        uris_to_scan = collect_uris(structure)
+
+        if not uris_to_scan:
+            return entities
+
+        # Use higher concurrency for metadata fetching (max 8 concurrent requests)
+        semaphore = asyncio.Semaphore(8)
+
+        async def fetch_entity_metadata(uri):
+            async with semaphore:
+                try:
+                    metadata = await eta_client.async_get_entity_metadata(uri)
+                    return uri, metadata
+                except Exception as e:
+                    _LOGGER.warning(f"Could not scan URI {uri}: {e}")
+                    return uri, None
+
+        # Fetch all metadata concurrently
+        metadata_tasks = [fetch_entity_metadata(uri) for uri in uris_to_scan]
+        results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+
+        # Process results
+        for result in results:
+            if isinstance(result, Exception):
+                continue
+
+            uri, metadata = result
+            if metadata:
+                entity_type = eta_client.classify_entity(metadata)
+                if entity_type == "sensor":
+                    if metadata.get("unit") == "":
+                        entities[TEXT_DICT][uri] = metadata
+                    else:
+                        entities[FLOAT_DICT][uri] = metadata
+                elif entity_type == "switch":
+                    entities[SWITCHES_DICT][uri] = metadata
+                elif entity_type in ("number", "time"):
+                    entities[WRITABLE_DICT][uri] = metadata
 
         return entities
 
     async def async_step_scan_device(self, user_input=None):
-        """Step to scan a single device."""
+        """Step to scan devices concurrently for better performance."""
         if not self.data.get("devices_to_scan"):
             # All devices scanned, move to device selection
             self.data[CHOSEN_DEVICES] = self.data["possible_devices"]
             return await self.async_step_select_device()
 
-        device_to_scan = self.data["devices_to_scan"][0]
-
         if user_input is not None:
-            scanned_data = await self._scan_device(device_to_scan)
-            self.data["scanned_devices_data"][device_to_scan] = scanned_data
+            # Scan all remaining devices concurrently
+            devices_to_scan = self.data["devices_to_scan"].copy()
 
-            # Remove the scanned device from the list
-            self.data["devices_to_scan"].pop(0)
+            # Use semaphore to limit concurrent device scans (max 3 concurrent)
+            semaphore = asyncio.Semaphore(3)
 
-            # Move to the next device or finish
-            return await self.async_step_scan_device()
+            async def scan_single_device(device_name: str):
+                async with semaphore:
+                    try:
+                        return device_name, await self._scan_device(device_name)
+                    except Exception as e:
+                        _LOGGER.error(f"Failed to scan device {device_name}: {e}")
+                        return device_name, None
 
+            # Create tasks for all remaining devices
+            scan_tasks = [scan_single_device(device) for device in devices_to_scan]
+
+            if scan_tasks:
+                try:
+                    # Execute all scans concurrently
+                    results = await asyncio.gather(*scan_tasks, return_exceptions=True)
+
+                    # Process results
+                    for result in results:
+                        if isinstance(result, Exception):
+                            _LOGGER.error(f"Device scan task failed: {result}")
+                            continue
+
+                        device_name, scanned_data = result
+                        if scanned_data:
+                            self.data["scanned_devices_data"][device_name] = scanned_data
+
+                except Exception as e:
+                    _LOGGER.error(f"Error during concurrent device scanning: {e}")
+
+            # Clear the devices to scan list since we're done
+            self.data["devices_to_scan"] = []
+
+            # Move to device selection
+            return await self.async_step_select_device()
+
+        # Show progress for the first device (they'll all be scanned concurrently)
+        first_device = self.data["devices_to_scan"][0]
         return self.async_show_form(
             step_id="scan_device",
-            description_placeholders={"device": device_to_scan},
+            description_placeholders={
+                "device": f"{first_device} and {len(self.data['devices_to_scan']) - 1} other devices",
+                "progress": f"Scanning {len(self.data['devices_to_scan'])} devices concurrently..."
+            },
             data_schema=vol.Schema({}),
-            last_step=len(self.data["devices_to_scan"]) == 1,
+            last_step=True,  # Always last step since we scan all at once
         )
 
     async def async_step_select_device(self, user_input=None):

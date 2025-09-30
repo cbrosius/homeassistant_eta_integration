@@ -102,13 +102,22 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                 if entity_structure:
                     collect_leaf_nodes(entity_structure)
 
-                semaphore = asyncio.Semaphore(5)  # Limit concurrency to 5
+                # Increased concurrency limit for better performance (max 10 concurrent requests)
+                semaphore = asyncio.Semaphore(10)
 
                 async def fetch_metadata(leaf_node):
                     async with semaphore:
                         uri = leaf_node["uri"]
-                        metadata = await eta_client.async_get_entity_metadata(uri)
-                        return leaf_node, metadata
+                        try:
+                            async with timeout(20):  # 20 second timeout for metadata fetch
+                                metadata = await eta_client.async_get_entity_metadata(uri)
+                                return leaf_node, metadata, None
+                        except asyncio.TimeoutError:
+                            _LOGGER.warning(f"Timeout fetching metadata for URI {uri}")
+                            return leaf_node, None, "timeout"
+                        except Exception as e:
+                            _LOGGER.warning(f"Failed to fetch metadata for URI {uri}: {e}")
+                            return leaf_node, None, e
 
                 metadata_tasks = [fetch_metadata(node) for node in leaf_nodes]
 
@@ -127,10 +136,10 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                             _LOGGER.warning("A metadata fetch task failed: %s", result)
                             continue
 
-                        leaf_node, metadata = result
-                        if not metadata:
+                        leaf_node, metadata, error = result
+                        if error or not metadata:
                             _LOGGER.warning(
-                                "Failed to get metadata for node %s", leaf_node["uri"]
+                                "Failed to get metadata for node %s: %s", leaf_node["uri"], error or "No metadata"
                             )
                             continue
 
@@ -211,6 +220,12 @@ class EtaDataUpdateCoordinator(DataUpdateCoordinator):
                             self._should_force_number_handling(sensor_endpoint["unit"]),
                         )
                         updated_values[sensor_key] = value
+                except asyncio.TimeoutError:
+                    _LOGGER.warning(
+                        "Timeout updating sensor %s for device %s",
+                        sensor_key,
+                        self.device_name,
+                    )
                 except Exception as e:
                     _LOGGER.error(
                         "Error updating sensor %s for device %s: %s",
